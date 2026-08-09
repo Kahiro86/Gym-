@@ -1,0 +1,29 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`golden file — 12-week training log > produces a stable snapshot of levels, ranks, and PR counts 1`] = `
+{
+  "finalLevel": 16,
+  "finalRanks": {
+    "abductors": "unranked",
+    "abs": "D",
+    "adductors": "unranked",
+    "back": "C",
+    "biceps": "E",
+    "calves": "unranked",
+    "chest": "C",
+    "forearms": "unranked",
+    "glutes": "D",
+    "hamstrings": "E",
+    "lowerBack": "D",
+    "neck": "unranked",
+    "obliques": "E",
+    "quads": "C",
+    "shoulders": "D",
+    "traps": "unranked",
+    "triceps": "D",
+  },
+  "prCount": 145,
+  "sessionCount": 36,
+  "totalXp": 4887,
+}
+`;
