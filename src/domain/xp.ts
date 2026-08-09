@@ -1,6 +1,6 @@
 import { computeSetVolume } from "./load.js";
 import { detectPrs, recordSetIntoHistory } from "./prs.js";
-import { requireExercise } from "./catalog.js";
+import { requireExercise } from "./registry.js";
 import { MUSCLE_IDS } from "./types.js";
 import type {
   Exercise,

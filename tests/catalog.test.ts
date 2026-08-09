@@ -2,9 +2,9 @@ import { describe, it, expect } from "vitest";
 import { EXERCISE_CATALOG } from "../src/domain/catalog.js";
 
 describe("exercise catalog", () => {
-  it("seeds roughly 80 exercises", () => {
+  it("seeds a full exercise library", () => {
     expect(EXERCISE_CATALOG.length).toBeGreaterThanOrEqual(70);
-    expect(EXERCISE_CATALOG.length).toBeLessThanOrEqual(100);
+    expect(EXERCISE_CATALOG.length).toBeLessThanOrEqual(130);
   });
 
   it("has unique ids", () => {

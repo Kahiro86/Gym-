@@ -1,5 +1,5 @@
 import { computeSetVolume } from "./load.js";
-import { requireExercise } from "./catalog.js";
+import { requireExercise } from "./registry.js";
 import { XP_CONSTANT } from "./xp.js";
 import { MUSCLE_IDS } from "./types.js";
 import type { LoggedSet, MuscleId } from "./types.js";
