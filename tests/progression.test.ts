@@ -12,9 +12,27 @@ describe("xpRequiredForLevel", () => {
     }
   });
 
-  it("requires roughly 1600 XP at level 20", () => {
-    expect(xpRequiredForLevel(20)).toBeGreaterThan(1400);
-    expect(xpRequiredForLevel(20)).toBeLessThan(1800);
+  it("requires 1423 XP at level 20 (v2 §5.1's corrected figure — 100 x 1.15^19)", () => {
+    expect(xpRequiredForLevel(20)).toBe(1423);
+  });
+
+  it("is strictly increasing across the level-25 growth-rate seam", () => {
+    for (let level = 20; level < 35; level++) {
+      expect(xpRequiredForLevel(level + 1)).toBeGreaterThan(xpRequiredForLevel(level));
+    }
+  });
+
+  it("growth slows past level 25 (1.06x) versus before it (1.15x)", () => {
+    const ratioBeforeSeam = xpRequiredForLevel(24) / xpRequiredForLevel(23);
+    const ratioAfterSeam = xpRequiredForLevel(30) / xpRequiredForLevel(29);
+    expect(ratioBeforeSeam).toBeGreaterThan(ratioAfterSeam);
+    expect(ratioAfterSeam).toBeCloseTo(1.06, 1);
+  });
+
+  it("keeps late progression perceptible — level 40 doesn't take an absurd number of sessions", () => {
+    // v1 bug: level 40 cost ~78 weeks at ~300 XP/week under pure 1.15 growth.
+    const weeksAt300XpPerWeek = xpRequiredForLevel(40) / 300;
+    expect(weeksAt300XpPerWeek).toBeLessThan(40);
   });
 });
 

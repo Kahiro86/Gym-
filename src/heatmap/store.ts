@@ -1,8 +1,8 @@
-import { HEATMAP_MUSCLES, getHeatmapMuscle } from "./registry.js";
+import { MUSCLES, getMuscle } from "../domain/muscles.js";
+import { computeCardioMuscleVolume, CARDIO_CAP } from "../domain/cardio.js";
 import { computeSetMuscleVolumes } from "./volume.js";
-import { computeCardioMuscleVolume, CARDIO_CAP } from "./cardio.js";
-import type { HeatmapMuscleId } from "./registry.js";
-import type { CardioSessionInput } from "./cardio.js";
+import type { MuscleId } from "../domain/muscles.js";
+import type { CardioLog } from "../domain/cardio.js";
 import type { LoggedSet } from "../domain/types.js";
 
 // §5: single rollup table, keyed (muscle_id, week_start). Decay and
@@ -32,7 +32,7 @@ function isoDate(date: Date): string {
 }
 
 export interface MuscleWeekRollupRow {
-  muscleId: HeatmapMuscleId;
+  muscleId: MuscleId;
   weekStart: string; // Monday, ISO date
   totalVolume: number; // flat, no decay applied (§5)
   liftingVolume: number; // excl. cardio, for cap math
@@ -42,7 +42,7 @@ export interface MuscleWeekRollupRow {
   lastTrainedAt: number | null; // epoch ms
 }
 
-function emptyRow(muscleId: HeatmapMuscleId, weekStart: string): MuscleWeekRollupRow {
+function emptyRow(muscleId: MuscleId, weekStart: string): MuscleWeekRollupRow {
   return {
     muscleId,
     weekStart,
@@ -57,10 +57,10 @@ function emptyRow(muscleId: HeatmapMuscleId, weekStart: string): MuscleWeekRollu
 
 export interface MuscleRollupStore {
   upsert(row: MuscleWeekRollupRow): void;
-  get(muscleId: HeatmapMuscleId, weekStart: string): MuscleWeekRollupRow | undefined;
+  get(muscleId: MuscleId, weekStart: string): MuscleWeekRollupRow | undefined;
   getWeek(weekStart: string): MuscleWeekRollupRow[];
-  getRange(muscleId: HeatmapMuscleId, fromWeekStart: string, toWeekStart: string): MuscleWeekRollupRow[];
-  delete(muscleId: HeatmapMuscleId, weekStart: string): void;
+  getRange(muscleId: MuscleId, fromWeekStart: string, toWeekStart: string): MuscleWeekRollupRow[];
+  delete(muscleId: MuscleId, weekStart: string): void;
 }
 
 // Reference implementation matching the spec's schema/semantics exactly —
@@ -69,7 +69,7 @@ export interface MuscleRollupStore {
 export class InMemoryMuscleRollupStore implements MuscleRollupStore {
   private rows = new Map<string, MuscleWeekRollupRow>();
 
-  private key(muscleId: HeatmapMuscleId, weekStart: string): string {
+  private key(muscleId: MuscleId, weekStart: string): string {
     return `${muscleId}::${weekStart}`;
   }
 
@@ -77,15 +77,15 @@ export class InMemoryMuscleRollupStore implements MuscleRollupStore {
     this.rows.set(this.key(row.muscleId, row.weekStart), row);
   }
 
-  get(muscleId: HeatmapMuscleId, weekStart: string): MuscleWeekRollupRow | undefined {
+  get(muscleId: MuscleId, weekStart: string): MuscleWeekRollupRow | undefined {
     return this.rows.get(this.key(muscleId, weekStart));
   }
 
   getWeek(weekStart: string): MuscleWeekRollupRow[] {
-    return HEATMAP_MUSCLES.map((m) => this.get(m.id, weekStart)).filter((row): row is MuscleWeekRollupRow => row !== undefined);
+    return MUSCLES.map((m) => this.get(m.id, weekStart)).filter((row): row is MuscleWeekRollupRow => row !== undefined);
   }
 
-  getRange(muscleId: HeatmapMuscleId, fromWeekStart: string, toWeekStart: string): MuscleWeekRollupRow[] {
+  getRange(muscleId: MuscleId, fromWeekStart: string, toWeekStart: string): MuscleWeekRollupRow[] {
     const results: MuscleWeekRollupRow[] = [];
     let cursor = fromWeekStart;
     while (cursor <= toWeekStart) {
@@ -96,15 +96,14 @@ export class InMemoryMuscleRollupStore implements MuscleRollupStore {
     return results;
   }
 
-  delete(muscleId: HeatmapMuscleId, weekStart: string): void {
+  delete(muscleId: MuscleId, weekStart: string): void {
     this.rows.delete(this.key(muscleId, weekStart));
   }
 }
 
 export interface HeatmapSessionInput {
-  sets: LoggedSet[];
-  bodyweightKg: number;
-  cardio?: CardioSessionInput[];
+  sets: LoggedSet[]; // each set carries its own bodyweightKg (v2 §3.5)
+  cardio?: CardioLog[];
 }
 
 function sessionStartMs(session: HeatmapSessionInput): number | undefined {
@@ -122,11 +121,11 @@ export function applySessionToRollup(store: MuscleRollupStore, session: HeatmapS
   if (startMs === undefined) return;
 
   const weekStart = weekStartFor(startMs);
-  const touchedThisSession = new Set<HeatmapMuscleId>();
+  const touchedThisSession = new Set<MuscleId>();
 
   for (const set of session.sets) {
-    const contributions = computeSetMuscleVolumes(set, session.bodyweightKg);
-    for (const [muscleId, volume] of Object.entries(contributions) as [HeatmapMuscleId, number][]) {
+    const contributions = computeSetMuscleVolumes(set);
+    for (const [muscleId, volume] of Object.entries(contributions) as [MuscleId, number][]) {
       if (!volume || volume <= 0) continue;
       const existing = store.get(muscleId, weekStart) ?? emptyRow(muscleId, weekStart);
       store.upsert({
@@ -143,10 +142,10 @@ export function applySessionToRollup(store: MuscleRollupStore, session: HeatmapS
 
   for (const cardioEntry of session.cardio ?? []) {
     const rawVolumes = computeCardioMuscleVolume(cardioEntry);
-    for (const [muscleId, rawVolume] of Object.entries(rawVolumes) as [HeatmapMuscleId, number][]) {
+    for (const [muscleId, rawVolume] of Object.entries(rawVolumes) as [MuscleId, number][]) {
       if (!rawVolume || rawVolume <= 0) continue;
       const existing = store.get(muscleId, weekStart) ?? emptyRow(muscleId, weekStart);
-      const volumeFloor = getHeatmapMuscle(muscleId).volumeFloor;
+      const volumeFloor = getMuscle(muscleId).volumeFloor;
       // §4 hard cap: cardio can't swamp a muscle's weekly heat. "Floored"
       // per §4/§7 means the cap uses at least volume_floor as its lifting
       // basis, so a muscle with near-zero lifting this week still gets a
@@ -172,7 +171,7 @@ export function applySessionToRollup(store: MuscleRollupStore, session: HeatmapS
 // affected rows." Full rebuild rather than incremental subtraction — the
 // cardio cap isn't cleanly invertible, but a from-scratch replay always is.
 export function recomputeWeekRollup(store: MuscleRollupStore, weekStart: string, sessionsInWeek: HeatmapSessionInput[]): void {
-  for (const muscle of HEATMAP_MUSCLES) {
+  for (const muscle of MUSCLES) {
     store.delete(muscle.id, weekStart);
   }
   for (const session of sessionsInWeek) {

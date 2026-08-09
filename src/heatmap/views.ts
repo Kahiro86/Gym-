@@ -1,6 +1,7 @@
-import { HEATMAP_MUSCLES, HEATMAP_GROUPS, getHeatmapMuscle } from "./registry.js";
+import { MUSCLES, GROUPS, getMuscle } from "../domain/muscles.js";
 import { addWeeks, weekStartFor, MS_PER_DAY } from "./store.js";
-import type { HeatmapGroupId, HeatmapMuscleId } from "./registry.js";
+import type { GroupId, MuscleId } from "../domain/muscles.js";
+import type { MuscleContribution } from "../domain/types.js";
 import type { MuscleRollupStore, MuscleWeekRollupRow } from "./store.js";
 
 const TRAILING_AVERAGE_WEEKS = 8;
@@ -20,7 +21,7 @@ function volumeWeightedMean(children: Array<{ value: number; volume: number }>):
 // ---- 6.1 Recency map ----
 
 export interface RecencyMapEntry {
-  muscleId: HeatmapMuscleId;
+  muscleId: MuscleId;
   heat: number; // 0-1
   freshness: number;
   trailingAverage: number;
@@ -42,7 +43,7 @@ export function computeRecencyMap(store: MuscleRollupStore, nowMs: number): Rece
   const currentWeekStart = weekStartFor(nowMs);
   const previousWeekStart = addWeeks(currentWeekStart, -1);
 
-  return HEATMAP_MUSCLES.map((muscle) => {
+  return MUSCLES.map((muscle) => {
     const currentRow = store.get(muscle.id, currentWeekStart);
     const previousRow = store.get(muscle.id, previousWeekStart);
 
@@ -75,13 +76,13 @@ function maxOrNull(...values: Array<number | null | undefined>): number | null {
 // ---- 6.2 Weekly map ----
 
 export interface WeeklyMuscleEntry {
-  muscleId: HeatmapMuscleId;
+  muscleId: MuscleId;
   volume: number;
   share: number; // 0-1
 }
 
 export interface WeeklyGroupEntry {
-  groupId: HeatmapGroupId;
+  groupId: GroupId;
   volume: number;
   color: number; // volume-weighted mean of child shares, 0-1
   percentage: number; // sum of child shares, 0-1
@@ -95,16 +96,16 @@ export interface WeeklyMap {
 }
 
 export function computeWeeklyMap(store: MuscleRollupStore, weekStart: string): WeeklyMap {
-  const rows = HEATMAP_MUSCLES.map((m) => store.get(m.id, weekStart));
+  const rows = MUSCLES.map((m) => store.get(m.id, weekStart));
   const totalVolume = rows.reduce((sum, r) => sum + (r?.totalVolume ?? 0), 0);
 
-  const muscles: WeeklyMuscleEntry[] = HEATMAP_MUSCLES.map((m, i) => {
+  const muscles: WeeklyMuscleEntry[] = MUSCLES.map((m, i) => {
     const volume = rows[i]?.totalVolume ?? 0;
     return { muscleId: m.id, volume, share: totalVolume > 0 ? volume / totalVolume : 0 };
   });
 
-  const groups: WeeklyGroupEntry[] = HEATMAP_GROUPS.map((g) => {
-    const children = muscles.filter((m) => getHeatmapMuscle(m.muscleId).groupId === g.id);
+  const groups: WeeklyGroupEntry[] = GROUPS.map((g) => {
+    const children = muscles.filter((m) => getMuscle(m.muscleId).groupId === g.id);
     const volume = children.reduce((sum, c) => sum + c.volume, 0);
     const color = volumeWeightedMean(children.map((c) => ({ value: c.share, volume: c.volume })));
     const percentage = children.reduce((sum, c) => sum + c.share, 0);
@@ -117,7 +118,7 @@ export function computeWeeklyMap(store: MuscleRollupStore, weekStart: string): W
 // ---- 6.3 Diff view ----
 
 export interface DiffMuscleEntry {
-  muscleId: HeatmapMuscleId;
+  muscleId: MuscleId;
   shareA: number;
   shareB: number;
   deltaShare: number;
@@ -138,7 +139,7 @@ export function computeDiffView(store: MuscleRollupStore, weekStartA: string, we
   const mapA = computeWeeklyMap(store, weekStartA);
   const mapB = computeWeeklyMap(store, weekStartB);
 
-  const muscles: DiffMuscleEntry[] = HEATMAP_MUSCLES.map((m) => {
+  const muscles: DiffMuscleEntry[] = MUSCLES.map((m) => {
     const a = mapA.muscles.find((x) => x.muscleId === m.id)!;
     const b = mapB.muscles.find((x) => x.muscleId === m.id)!;
     return {
@@ -158,13 +159,13 @@ export function computeDiffView(store: MuscleRollupStore, weekStartA: string, we
 // ---- §8 registry-authoring integrity check ----
 // "A muscle with zero exercises mapped to it renders permanently
 // untrained... this is a data bug, not a user state." Exposed so it can be
-// asserted in tests against the real catalog.
-export function findUnmappedMuscles(allWeights: Array<{ muscle: HeatmapMuscleId; weight: number }[]>): HeatmapMuscleId[] {
-  const mapped = new Set<HeatmapMuscleId>();
-  for (const contributions of allWeights) {
+// asserted in tests against the real catalog's exercise.muscles arrays.
+export function findUnmappedMuscles(allExerciseMuscles: MuscleContribution[][]): MuscleId[] {
+  const mapped = new Set<MuscleId>();
+  for (const contributions of allExerciseMuscles) {
     for (const c of contributions) {
-      if (c.weight > 0) mapped.add(c.muscle);
+      if (c.share > 0) mapped.add(c.muscle);
     }
   }
-  return HEATMAP_MUSCLES.map((m) => m.id).filter((id) => !mapped.has(id));
+  return MUSCLES.map((m) => m.id).filter((id) => !mapped.has(id));
 }

@@ -1,16 +1,17 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { InMemoryMuscleRollupStore, weekStartFor, addWeeks, applySessionToRollup } from "../../src/heatmap/store.js";
 import { computeWeeklyMap, computeDiffView, computeRecencyMap } from "../../src/heatmap/views.js";
-import { HEATMAP_MUSCLES } from "../../src/heatmap/registry.js";
+import { MUSCLES } from "../../src/domain/muscles.js";
 import type { HeatmapSessionInput } from "../../src/heatmap/store.js";
 
+const BW = 80;
 const MONDAY_NOON = Date.UTC(2026, 7, 10, 12, 0, 0);
 
 function benchSession(ts: number, weightKg: number): HeatmapSessionInput {
-  return { sets: [{ exerciseId: "barbell-bench-press", weightKg, reps: 10, timestamp: ts }], bodyweightKg: 80 };
+  return { sets: [{ exerciseId: "barbell-bench-press", weightKg, reps: 10, bodyweightKg: BW, timestamp: ts }] };
 }
 function squatSession(ts: number, weightKg: number): HeatmapSessionInput {
-  return { sets: [{ exerciseId: "back-squat", weightKg, reps: 5, timestamp: ts }], bodyweightKg: 80 };
+  return { sets: [{ exerciseId: "back-squat", weightKg, reps: 5, bodyweightKg: BW, timestamp: ts }] };
 }
 
 describe("computeWeeklyMap — cold start", () => {
@@ -44,7 +45,7 @@ describe("computeWeeklyMap — aggregation", () => {
   it("group percentage equals the sum of child percentages", () => {
     const map = computeWeeklyMap(store, weekStart);
     for (const group of map.groups) {
-      const children = map.muscles.filter((m) => HEATMAP_MUSCLES.find((h) => h.id === m.muscleId)!.groupId === group.groupId);
+      const children = map.muscles.filter((m) => MUSCLES.find((h) => h.id === m.muscleId)!.groupId === group.groupId);
       const expectedPercentage = children.reduce((sum, c) => sum + c.share, 0);
       expect(group.percentage, group.groupId).toBeCloseTo(expectedPercentage, 5);
     }
@@ -54,8 +55,7 @@ describe("computeWeeklyMap — aggregation", () => {
     const store2 = new InMemoryMuscleRollupStore();
     // Only lateral raise this week: heavy on deltLateral, ~nothing on anterior/posterior.
     applySessionToRollup(store2, {
-      sets: [{ exerciseId: "lateral-raise", weightKg: 8, reps: 12, timestamp: MONDAY_NOON }],
-      bodyweightKg: 80,
+      sets: [{ exerciseId: "lateral-raise", weightKg: 8, reps: 12, bodyweightKg: BW, timestamp: MONDAY_NOON }],
     });
     const map = computeWeeklyMap(store2, weekStart);
     const shoulders = map.groups.find((g) => g.groupId === "shoulders")!;
@@ -114,10 +114,10 @@ describe("computeDiffView", () => {
     applySessionToRollup(store, benchSession(MONDAY_NOON, 60));
 
     const diff = computeDiffView(store, weekA, weekB);
-    const pecSternal = diff.muscles.find((m) => m.muscleId === "pecSternal")!;
-    expect(pecSternal.volumeA).toBeGreaterThan(0);
-    expect(pecSternal.volumeB).toBe(0);
-    expect(pecSternal.deltaVolume).toBe(pecSternal.volumeB - pecSternal.volumeA);
+    const chestSternal = diff.muscles.find((m) => m.muscleId === "chestSternal")!;
+    expect(chestSternal.volumeA).toBeGreaterThan(0);
+    expect(chestSternal.volumeB).toBe(0);
+    expect(chestSternal.deltaVolume).toBe(chestSternal.volumeB - chestSternal.volumeA);
   });
 });
 
@@ -127,12 +127,12 @@ describe("computeRecencyMap — normalization", () => {
     applySessionToRollup(store, benchSession(MONDAY_NOON, 60));
 
     const recency = computeRecencyMap(store, MONDAY_NOON + 1000);
-    const pecSternal = recency.find((r) => r.muscleId === "pecSternal")!;
+    const chestSternal = recency.find((r) => r.muscleId === "chestSternal")!;
 
     // trailing average is ~0 (no history), so the floor dominates the
     // denominator — a single set must not saturate heat to 1.
-    expect(pecSternal.heat).toBeLessThan(1);
-    expect(pecSternal.heat).toBeGreaterThan(0);
+    expect(chestSternal.heat).toBeLessThan(1);
+    expect(chestSternal.heat).toBeGreaterThan(0);
   });
 
   it("trailing average with fewer than 8 weeks of history degrades gracefully (no crash, no NaN)", () => {
@@ -154,14 +154,14 @@ describe("computeRecencyMap — normalization", () => {
     applySessionToRollup(store, benchSession(MONDAY_NOON, 60));
     const nowMs = MONDAY_NOON + 2 * 86_400_000; // 2 days later
 
-    const muscle = HEATMAP_MUSCLES.find((m) => m.id === "pecSternal")!;
+    const muscle = MUSCLES.find((m) => m.id === "chestSternal")!;
     const originalTau = muscle.tauDays;
 
-    const before = computeRecencyMap(store, nowMs).find((r) => r.muscleId === "pecSternal")!;
+    const before = computeRecencyMap(store, nowMs).find((r) => r.muscleId === "chestSternal")!;
     let after;
     try {
       muscle.tauDays = 1.0; // simulate a tuning change — no stored row is touched
-      after = computeRecencyMap(store, nowMs).find((r) => r.muscleId === "pecSternal")!;
+      after = computeRecencyMap(store, nowMs).find((r) => r.muscleId === "chestSternal")!;
     } finally {
       muscle.tauDays = originalTau;
     }
@@ -173,8 +173,8 @@ describe("computeRecencyMap — normalization", () => {
     const store = new InMemoryMuscleRollupStore();
     applySessionToRollup(store, benchSession(MONDAY_NOON, 60));
 
-    const soon = computeRecencyMap(store, MONDAY_NOON + 1000).find((r) => r.muscleId === "pecSternal")!;
-    const later = computeRecencyMap(store, MONDAY_NOON + 5 * 86_400_000).find((r) => r.muscleId === "pecSternal")!;
+    const soon = computeRecencyMap(store, MONDAY_NOON + 1000).find((r) => r.muscleId === "chestSternal")!;
+    const later = computeRecencyMap(store, MONDAY_NOON + 5 * 86_400_000).find((r) => r.muscleId === "chestSternal")!;
     expect(later.freshness).toBeLessThan(soon.freshness);
   });
 });

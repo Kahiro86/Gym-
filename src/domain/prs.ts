@@ -1,29 +1,32 @@
 import { resolveEffectiveLoad, computeSetVolume } from "./load.js";
 import type { Exercise, ExerciseHistory, LoggedSet, Pr } from "./types.js";
-import { emptyExerciseHistory } from "./types.js";
 
-export function detectPrs(
-  exercise: Exercise,
-  set: LoggedSet,
-  history: ExerciseHistory | undefined,
-  bodyweightKg: number
-): Pr[] {
-  const h = history ?? emptyExerciseHistory();
-  const effectiveLoad = resolveEffectiveLoad(exercise, set, bodyweightKg);
-  const volume = computeSetVolume(exercise, set, bodyweightKg);
+// v2 §4.6: no PRs fire on an exercise's first-ever log (the discovery
+// bonus replaces them — otherwise all three PR types trivially fire
+// against empty history, making a first session mostly bonus rather than
+// training). `history === undefined` is exactly that signal: a key absent
+// from HistoryContext.exerciseHistory means this exercise has never been
+// logged before, as opposed to a present-but-zeroed record.
+export function detectPrs(exercise: Exercise, set: LoggedSet, history: ExerciseHistory | undefined): Pr[] {
+  if (history === undefined) {
+    return [];
+  }
+
+  const effectiveLoad = resolveEffectiveLoad(exercise, set);
+  const volume = computeSetVolume(exercise, set);
   const prs: Pr[] = [];
 
-  if (!isLoadFree(exercise) && effectiveLoad > h.maxWeightKg) {
+  if (!isLoadFree(exercise) && effectiveLoad > history.maxWeightKg) {
     prs.push({
       type: "weight",
       exerciseId: exercise.id,
       value: effectiveLoad,
-      previousBest: h.maxWeightKg,
+      previousBest: history.maxWeightKg,
     });
   }
 
   if (usesReps(exercise) && set.reps !== undefined) {
-    const bestRepsAtOrAbove = h.repsAtLoad
+    const bestRepsAtOrAbove = history.repsAtLoad
       .filter((r) => r.loadKg >= effectiveLoad)
       .reduce((max, r) => Math.max(max, r.reps), 0);
 
@@ -37,12 +40,12 @@ export function detectPrs(
     }
   }
 
-  if (volume > h.maxVolumeSingleSet) {
+  if (volume > history.maxVolumeSingleSet) {
     prs.push({
       type: "volume",
       exerciseId: exercise.id,
       value: volume,
-      previousBest: h.maxVolumeSingleSet,
+      previousBest: history.maxVolumeSingleSet,
     });
   }
 
@@ -61,22 +64,14 @@ function usesReps(exercise: Exercise): boolean {
   return exercise.loadType !== "time" && exercise.loadType !== "distance";
 }
 
-export function recordSetIntoHistory(
-  exercise: Exercise,
-  set: LoggedSet,
-  history: ExerciseHistory | undefined,
-  bodyweightKg: number
-): ExerciseHistory {
-  const h = history ?? emptyExerciseHistory();
-  const effectiveLoad = resolveEffectiveLoad(exercise, set, bodyweightKg);
-  const volume = computeSetVolume(exercise, set, bodyweightKg);
+export function recordSetIntoHistory(exercise: Exercise, set: LoggedSet, history: ExerciseHistory | undefined): ExerciseHistory {
+  const h = history ?? { maxWeightKg: 0, maxVolumeSingleSet: 0, repsAtLoad: [] };
+  const effectiveLoad = resolveEffectiveLoad(exercise, set);
+  const volume = computeSetVolume(exercise, set);
 
   return {
     maxWeightKg: Math.max(h.maxWeightKg, effectiveLoad),
     maxVolumeSingleSet: Math.max(h.maxVolumeSingleSet, volume),
-    repsAtLoad:
-      set.reps !== undefined
-        ? [...h.repsAtLoad, { loadKg: effectiveLoad, reps: set.reps }]
-        : h.repsAtLoad,
+    repsAtLoad: set.reps !== undefined ? [...h.repsAtLoad, { loadKg: effectiveLoad, reps: set.reps }] : h.repsAtLoad,
   };
 }

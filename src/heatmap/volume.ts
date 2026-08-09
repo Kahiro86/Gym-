@@ -1,29 +1,28 @@
 import { computeSetVolume } from "../domain/load.js";
 import { requireExercise } from "../domain/registry.js";
-import { computeHeatmapContributions } from "./muscleWeights.js";
 import type { LoggedSet } from "../domain/types.js";
-import type { HeatmapMuscleId } from "./registry.js";
+import type { MuscleId } from "../domain/muscles.js";
 
-// §4: volume = reps x load, with load resolution coming from the existing
-// Layer 1 load-type taxonomy (computeSetVolume) — this is what makes the
-// pushup bug (§11 regression test) structurally impossible here too.
+// §4: volume = reps x load, with load resolution coming from Layer 1's
+// load-type taxonomy — what makes the pushup bug structurally impossible
+// here too. exercise.muscles is already head-level with primaryMover
+// (Layer 1 catalog.ts authors it that way now), so this just reads it —
+// no separate derivation lives in Layer 2 anymore.
 
-export function computeSetMuscleVolumes(set: LoggedSet, bodyweightKg: number): Partial<Record<HeatmapMuscleId, number>> {
+export function computeSetMuscleVolumes(set: LoggedSet): Partial<Record<MuscleId, number>> {
   const exercise = requireExercise(set.exerciseId);
-  const volume = computeSetVolume(exercise, set, bodyweightKg);
+  const volume = computeSetVolume(exercise, set);
   if (volume <= 0) return {};
 
-  const result: Partial<Record<HeatmapMuscleId, number>> = {};
-  for (const contribution of computeHeatmapContributions(exercise)) {
-    if (contribution.weight <= 0) continue;
-    result[contribution.muscle] = (result[contribution.muscle] ?? 0) + volume * contribution.weight;
+  const result: Partial<Record<MuscleId, number>> = {};
+  for (const contribution of exercise.muscles) {
+    if (contribution.share <= 0) continue;
+    result[contribution.muscle] = (result[contribution.muscle] ?? 0) + volume * contribution.share;
   }
   return result;
 }
 
-export function primaryMusclesTouched(set: LoggedSet): HeatmapMuscleId[] {
+export function primaryMusclesTouched(set: LoggedSet): MuscleId[] {
   const exercise = requireExercise(set.exerciseId);
-  return computeHeatmapContributions(exercise)
-    .filter((c) => c.primary)
-    .map((c) => c.muscle);
+  return exercise.muscles.filter((c) => c.primaryMover).map((c) => c.muscle);
 }

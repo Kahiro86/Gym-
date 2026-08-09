@@ -1,7 +1,16 @@
 import type { Rank, RankOrUnranked } from "./types.js";
 
+const CURVE_SEAM_LEVEL = 25;
+
+// v2 §5.1: pure 1.15^(n-1) growth makes cost exponential while income
+// (sqrt-compressed, reference-volume-normalized) is near-flat — level 30
+// cost ~19 weeks of play, level 40 ~78. Growth switches to a gentler 1.06
+// past the seam so late progression stays perceptible without the wall.
 export function xpRequiredForLevel(level: number): number {
-  return Math.round(100 * Math.pow(1.15, level - 1));
+  if (level <= CURVE_SEAM_LEVEL) {
+    return Math.round(100 * Math.pow(1.15, level - 1));
+  }
+  return Math.round(100 * Math.pow(1.15, CURVE_SEAM_LEVEL - 1) * Math.pow(1.06, level - CURVE_SEAM_LEVEL));
 }
 
 export interface LevelProgress {

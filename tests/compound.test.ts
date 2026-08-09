@@ -4,12 +4,18 @@ import { requireExercise } from "../src/domain/registry.js";
 import { computeSetVolume } from "../src/domain/load.js";
 import { computeSessionXp } from "../src/domain/xp.js";
 import { detectPrs } from "../src/domain/prs.js";
-import { emptyExerciseHistory, MUSCLE_IDS } from "../src/domain/types.js";
+import { emptyExerciseHistory } from "../src/domain/types.js";
 import type { HistoryContext, LoggedSet, SessionInput } from "../src/domain/types.js";
+
+const BW = 80;
 
 beforeEach(() => {
   clearCompoundRegistry();
 });
+
+function set(overrides: Partial<LoggedSet> & { exerciseId: string }): LoggedSet {
+  return { bodyweightKg: BW, timestamp: 0, ...overrides };
+}
 
 describe("createCompoundExercise", () => {
   it("requires at least 2 components", () => {
@@ -45,10 +51,15 @@ describe("createCompoundExercise", () => {
     const total = compound.muscles.reduce((sum, m) => sum + m.share, 0);
     expect(total).toBeCloseTo(1.0, 5);
 
-    // every muscle either component trains should show up
+    // every muscle either component trains should show up (pushup -> chest heads, squat -> quads)
     const muscleSet = new Set(compound.muscles.map((m) => m.muscle));
-    expect(muscleSet.has("chest")).toBe(true);
+    expect(muscleSet.has("chestSternal")).toBe(true);
     expect(muscleSet.has("quads")).toBe(true);
+  });
+
+  it("carries primaryMover through the blend", () => {
+    const compound = createCompoundExercise("squat-thrust-primary", "Squat Thrust Primary", ["pushup", "bodyweight-squat"]);
+    expect(compound.muscles.some((m) => m.primaryMover)).toBe(true);
   });
 
   it("sums referenceVolume across components and embeds them for load.ts to recurse into", () => {
@@ -63,6 +74,13 @@ describe("createCompoundExercise", () => {
   it("is unilateral if any component is unilateral", () => {
     const compound = createCompoundExercise("archer-lunge", "Archer Lunge Combo", ["archer-pushup", "reverse-lunge"]);
     expect(compound.unilateral).toBe(true);
+  });
+
+  it("takes defaultRestSeconds as the max across components", () => {
+    const pushup = requireExercise("pushup");
+    const squat = requireExercise("bodyweight-squat");
+    const compound = createCompoundExercise("squat-thrust-rest", "Squat Thrust Rest", ["pushup", "bodyweight-squat"]);
+    expect(compound.defaultRestSeconds).toBe(Math.max(pushup.defaultRestSeconds, squat.defaultRestSeconds));
   });
 
   it("weights muscle blending by emphasis when provided", () => {
@@ -95,24 +113,22 @@ describe("mixed load-type compounds", () => {
     const row = requireExercise("barbell-row");
     const compound = createCompoundExercise("pushup-row", "Pushup + Row", ["pushup", "barbell-row"]);
 
-    const set: LoggedSet = { exerciseId: compound.id, weightKg: 50, reps: 8, timestamp: 0 };
-    const bodyweightKg = 80;
-
-    const expected = computeSetVolume(pushup, set, bodyweightKg) + computeSetVolume(row, set, bodyweightKg);
-    expect(computeSetVolume(compound, set, bodyweightKg)).toBeCloseTo(expected);
+    const s = set({ exerciseId: compound.id, weightKg: 50, reps: 8 });
+    const expected = computeSetVolume(pushup, s) + computeSetVolume(row, s);
+    expect(computeSetVolume(compound, s)).toBeCloseTo(expected);
   });
 
   it("still detects rep PRs when only some components are reps-based", () => {
     const compound = createCompoundExercise("pushup-row-2", "Pushup + Row 2", ["pushup", "barbell-row"]);
-    const set: LoggedSet = { exerciseId: compound.id, weightKg: 50, reps: 8, timestamp: 0 };
-    const prs = detectPrs(compound, set, undefined, 80);
+    const s = set({ exerciseId: compound.id, weightKg: 50, reps: 8 });
+    const prs = detectPrs(compound, s, emptyExerciseHistory());
     expect(prs.some((p) => p.type === "rep")).toBe(true);
   });
 
   it("supports a time-based component alongside a reps-based one", () => {
     const compound = createCompoundExercise("pushup-plank", "Pushup + Plank Hold", ["pushup", "plank"]);
-    const set: LoggedSet = { exerciseId: compound.id, reps: 10, durationSec: 30, timestamp: 0 };
-    const volume = computeSetVolume(compound, set, 80);
+    const s = set({ exerciseId: compound.id, reps: 10, durationSec: 30 });
+    const volume = computeSetVolume(compound, s);
     expect(volume).toBeGreaterThan(0);
     expect(Number.isNaN(volume)).toBe(false);
   });
@@ -121,8 +137,8 @@ describe("mixed load-type compounds", () => {
     const inner = createCompoundExercise("inner-combo", "Inner Combo", ["pushup", "bodyweight-squat"]);
     const outer = createCompoundExercise("outer-combo", "Outer Combo", [inner.id, "plank"]);
 
-    const set: LoggedSet = { exerciseId: outer.id, reps: 10, durationSec: 20, timestamp: 0 };
-    const volume = computeSetVolume(outer, set, 80);
+    const s = set({ exerciseId: outer.id, reps: 10, durationSec: 20 });
+    const volume = computeSetVolume(outer, s);
     expect(volume).toBeGreaterThan(0);
     expect(Number.isNaN(volume)).toBe(false);
 
@@ -133,30 +149,24 @@ describe("mixed load-type compounds", () => {
 
 describe("compound exercises in a real session", () => {
   it("computes XP and attributes muscleXp across every component's muscles", () => {
-    const compound = createCompoundExercise("burpee-complex", "Burpee Complex", [
-      "pushup",
-      "bodyweight-squat",
-    ]);
+    const compound = createCompoundExercise("burpee-complex", "Burpee Complex", ["pushup", "bodyweight-squat"]);
 
     const history: HistoryContext = {
       exerciseHistory: { [compound.id]: emptyExerciseHistory() },
       isFirstSessionOfDay: true,
-      completesWeeklyTarget: false,
       streakWeeks: 0,
     };
 
     const session: SessionInput = {
-      sets: [{ exerciseId: compound.id, reps: 10, timestamp: 0 }],
-      bodyweightKg: 80,
-      history,
+      sets: [set({ exerciseId: compound.id, reps: 10 })],
     };
 
-    const result = computeSessionXp(session);
+    const result = computeSessionXp(session, history);
     expect(result.total).toBeGreaterThan(0);
     expect(Number.isNaN(result.total)).toBe(false);
 
-    for (const muscle of ["chest", "triceps", "shoulders", "quads", "glutes", "hamstrings", "abductors"]) {
-      expect(result.muscleXp[muscle as (typeof MUSCLE_IDS)[number]]).toBeGreaterThan(0);
+    for (const muscle of ["chestSternal", "tricepsLong", "deltAnterior", "quads", "glutes", "hamstrings", "abductors"] as const) {
+      expect(result.muscleXp[muscle]).toBeGreaterThan(0);
     }
   });
 });

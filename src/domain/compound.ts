@@ -1,5 +1,6 @@
 import { getExercise as getSeedExercise } from "./catalog.js";
-import type { Exercise, MuscleContribution, MuscleId } from "./types.js";
+import type { Exercise, MuscleContribution } from "./types.js";
+import type { MuscleId } from "./muscles.js";
 
 // A compound exercise is a derived Exercise built from 2+ existing exercises
 // performed together as one movement (e.g. a barbell complex, or a mixed
@@ -61,10 +62,13 @@ export function createCompoundExercise(
     name,
     aliases: options.aliases ?? [],
     loadType: components_[0]!.exercise.loadType,
+    limbsLoaded: components_[0]!.exercise.limbsLoaded,
     muscles: blendMuscleContributions(components_),
     equipment: dedupe(components_.flatMap((c) => c.exercise.equipment)),
     unilateral: components_.some((c) => c.exercise.unilateral),
     referenceVolume: components_.reduce((sum, c) => sum + c.exercise.referenceVolume, 0),
+    // A compound needs at least as much rest as its most demanding component.
+    defaultRestSeconds: Math.max(...components_.map((c) => c.exercise.defaultRestSeconds)),
     components: components_.map((c) => c.exercise),
   };
 
@@ -73,17 +77,21 @@ export function createCompoundExercise(
 }
 
 function blendMuscleContributions(components: Array<{ exercise: Exercise; emphasis: number }>): MuscleContribution[] {
-  const totals = new Map<MuscleId, number>();
+  const totals = new Map<MuscleId, { share: number; primaryMover: boolean }>();
   const totalEmphasis = components.reduce((sum, c) => sum + c.emphasis, 0);
 
   for (const { exercise, emphasis } of components) {
     for (const contribution of exercise.muscles) {
       const weightedShare = (contribution.share * emphasis) / totalEmphasis;
-      totals.set(contribution.muscle, (totals.get(contribution.muscle) ?? 0) + weightedShare);
+      const current = totals.get(contribution.muscle) ?? { share: 0, primaryMover: false };
+      totals.set(contribution.muscle, {
+        share: current.share + weightedShare,
+        primaryMover: current.primaryMover || contribution.primaryMover,
+      });
     }
   }
 
-  return Array.from(totals.entries()).map(([muscle, share]) => ({ muscle, share }));
+  return Array.from(totals.entries()).map(([muscle, v]) => ({ muscle, share: v.share, primaryMover: v.primaryMover }));
 }
 
 function dedupe<T>(items: T[]): T[] {

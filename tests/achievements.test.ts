@@ -70,7 +70,7 @@ describe("evaluateAchievements", () => {
 
   it("unlocks first-s-rank only once a muscle actually reaches S", () => {
     const stats = baseStats();
-    stats.muscleXp.chest = 8000;
+    stats.muscleXp.chestSternal = 8000;
     const unlocked = evaluateAchievements(stats, []);
     expect(unlocked.map((u) => u.achievementId)).toContain("first-s-rank");
   });

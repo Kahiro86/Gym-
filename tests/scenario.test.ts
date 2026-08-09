@@ -13,7 +13,6 @@ function freshHistory(exerciseIds: string[], overrides: Partial<HistoryContext> 
   return {
     exerciseHistory,
     isFirstSessionOfDay: true,
-    completesWeeklyTarget: false,
     streakWeeks: 0,
     ...overrides,
   };
@@ -26,18 +25,15 @@ describe("scenario — realistic first session produces a level-up", () => {
     const plank = requireExercise("plank");
 
     const sets: LoggedSet[] = [
-      ...Array.from({ length: 3 }, (_, i) => ({ exerciseId: pushup.id, reps: 15, timestamp: i })),
-      ...Array.from({ length: 3 }, (_, i) => ({ exerciseId: squat.id, reps: 15, timestamp: 3 + i })),
-      ...Array.from({ length: 3 }, (_, i) => ({ exerciseId: plank.id, durationSec: 40, timestamp: 6 + i })),
+      ...Array.from({ length: 3 }, (_, i) => ({ exerciseId: pushup.id, reps: 15, bodyweightKg: BW, timestamp: i })),
+      ...Array.from({ length: 3 }, (_, i) => ({ exerciseId: squat.id, reps: 15, bodyweightKg: BW, timestamp: 3 + i })),
+      ...Array.from({ length: 3 }, (_, i) => ({ exerciseId: plank.id, durationSec: 40, bodyweightKg: BW, timestamp: 6 + i })),
     ];
 
-    const session: SessionInput = {
-      sets,
-      bodyweightKg: BW,
-      history: freshHistory([pushup.id, squat.id, plank.id]),
-    };
+    const session: SessionInput = { sets };
+    const history = freshHistory([pushup.id, squat.id, plank.id]);
 
-    const result = computeSessionXp(session);
+    const result = computeSessionXp(session, history);
     expect(result.total).toBeGreaterThanOrEqual(xpRequiredForLevel(1));
 
     const progress = levelFromTotalXp(result.total);
@@ -62,23 +58,18 @@ describe("scenario — comparable effort across rep ranges", () => {
         },
       },
       isFirstSessionOfDay: false,
-      completesWeeklyTarget: false,
       streakWeeks: 0,
     });
 
     const fiveByFive: SessionInput = {
-      sets: Array.from({ length: 5 }, (_, i) => ({ exerciseId: squat.id, weightKg: 122, reps: 5, timestamp: i })),
-      bodyweightKg: BW,
-      history: noPrHistory(),
+      sets: Array.from({ length: 5 }, (_, i) => ({ exerciseId: squat.id, weightKg: 122, reps: 5, bodyweightKg: BW, timestamp: i })),
     };
     const threeByTwelve: SessionInput = {
-      sets: Array.from({ length: 3 }, (_, i) => ({ exerciseId: squat.id, weightKg: 98, reps: 12, timestamp: i })),
-      bodyweightKg: BW,
-      history: noPrHistory(),
+      sets: Array.from({ length: 3 }, (_, i) => ({ exerciseId: squat.id, weightKg: 98, reps: 12, bodyweightKg: BW, timestamp: i })),
     };
 
-    const a = computeSessionXp(fiveByFive).total;
-    const b = computeSessionXp(threeByTwelve).total;
+    const a = computeSessionXp(fiveByFive, noPrHistory()).total;
+    const b = computeSessionXp(threeByTwelve, noPrHistory()).total;
 
     const ratio = Math.max(a, b) / Math.min(a, b);
     expect(ratio).toBeLessThanOrEqual(1.2);
@@ -104,24 +95,21 @@ describe("golden file — 12-week training log", () => {
         const rowWeight = 45 + week * 1.5;
 
         const sets: LoggedSet[] = [
-          { exerciseId: "back-squat", weightKg: squatWeight, reps: 5, timestamp: sessionCount * 10 },
-          { exerciseId: "back-squat", weightKg: squatWeight, reps: 5, timestamp: sessionCount * 10 + 1 },
-          { exerciseId: "back-squat", weightKg: squatWeight, reps: 5, timestamp: sessionCount * 10 + 2 },
-          { exerciseId: "barbell-bench-press", weightKg: benchWeight, reps: 8, timestamp: sessionCount * 10 + 3 },
-          { exerciseId: "barbell-bench-press", weightKg: benchWeight, reps: 8, timestamp: sessionCount * 10 + 4 },
-          { exerciseId: "barbell-row", weightKg: rowWeight, reps: 8, timestamp: sessionCount * 10 + 5 },
-          { exerciseId: "barbell-row", weightKg: rowWeight, reps: 8, timestamp: sessionCount * 10 + 6 },
-          { exerciseId: "pushup", reps: 15 + week, timestamp: sessionCount * 10 + 7 },
-          { exerciseId: "plank", durationSec: 45 + week, timestamp: sessionCount * 10 + 8 },
+          { exerciseId: "back-squat", weightKg: squatWeight, reps: 5, bodyweightKg: BW, timestamp: sessionCount * 10 },
+          { exerciseId: "back-squat", weightKg: squatWeight, reps: 5, bodyweightKg: BW, timestamp: sessionCount * 10 + 1 },
+          { exerciseId: "back-squat", weightKg: squatWeight, reps: 5, bodyweightKg: BW, timestamp: sessionCount * 10 + 2 },
+          { exerciseId: "barbell-bench-press", weightKg: benchWeight, reps: 8, bodyweightKg: BW, timestamp: sessionCount * 10 + 3 },
+          { exerciseId: "barbell-bench-press", weightKg: benchWeight, reps: 8, bodyweightKg: BW, timestamp: sessionCount * 10 + 4 },
+          { exerciseId: "barbell-row", weightKg: rowWeight, reps: 8, bodyweightKg: BW, timestamp: sessionCount * 10 + 5 },
+          { exerciseId: "barbell-row", weightKg: rowWeight, reps: 8, bodyweightKg: BW, timestamp: sessionCount * 10 + 6 },
+          { exerciseId: "pushup", reps: 15 + week, bodyweightKg: BW, timestamp: sessionCount * 10 + 7 },
+          { exerciseId: "plank", durationSec: 45 + week, bodyweightKg: BW, timestamp: sessionCount * 10 + 8 },
         ];
 
-        const session: SessionInput = {
-          sets,
-          bodyweightKg: 80,
-          history: { ...history, isFirstSessionOfDay: day === 0 },
-        };
+        const session: SessionInput = { sets };
+        const sessionHistory: HistoryContext = { ...history, isFirstSessionOfDay: day === 0 };
 
-        const result = computeSessionXp(session);
+        const result = computeSessionXp(session, sessionHistory);
         totalXp += result.total;
         prCount += result.prs.length;
         for (const muscle of MUSCLE_IDS) muscleXpTotals[muscle]! += result.muscleXp[muscle];

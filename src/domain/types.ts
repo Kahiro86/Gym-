@@ -1,5 +1,9 @@
 // Layer 1 domain types. Pure data — no behavior lives here.
 
+export type { MuscleId, GroupId, BodyView } from "./muscles.js";
+export { MUSCLE_IDS } from "./muscles.js";
+import type { MuscleId } from "./muscles.js";
+
 export type LoadType =
   | "barbell"
   | "machine"
@@ -10,45 +14,6 @@ export type LoadType =
   | "assisted"
   | "time"
   | "distance";
-
-export type MuscleId =
-  | "chest"
-  | "back"
-  | "lowerBack"
-  | "traps"
-  | "neck"
-  | "shoulders"
-  | "biceps"
-  | "triceps"
-  | "forearms"
-  | "abs"
-  | "obliques"
-  | "glutes"
-  | "quads"
-  | "hamstrings"
-  | "calves"
-  | "abductors"
-  | "adductors";
-
-export const MUSCLE_IDS: MuscleId[] = [
-  "chest",
-  "back",
-  "lowerBack",
-  "traps",
-  "neck",
-  "shoulders",
-  "biceps",
-  "triceps",
-  "forearms",
-  "abs",
-  "obliques",
-  "glutes",
-  "quads",
-  "hamstrings",
-  "calves",
-  "abductors",
-  "adductors",
-];
 
 export type Equipment =
   | "barbell"
@@ -66,24 +31,30 @@ export type Equipment =
 export interface MuscleContribution {
   muscle: MuscleId;
   share: number; // 0-1; all shares for one exercise sum to 1.0
+  // Independent of share (v2 §3.4): drives the binary "trained" state
+  // (heatmap outline, "not yet trained" copy). Heat/XP intensity always
+  // uses the full weighted share regardless of this flag.
+  primaryMover: boolean;
 }
 
 export interface Exercise {
   id: string;
   name: string;
   aliases: string[];
-  // For a compound exercise (components present), loadType is only the
-  // first component's type — advisory/display only. Volume and effective
-  // load always recurse into `components` instead of using this exercise's
-  // own loadType/leverageFactor/intensityFactor, so a compound can freely
-  // mix load types (e.g. a bodyweight pushup + a barbell row).
+  // For a compound exercise (components present), loadType/limbsLoaded are
+  // only the first component's values — advisory/display only. Volume and
+  // effective load always recurse into `components` instead of using this
+  // exercise's own load fields, so a compound can freely mix load types
+  // (e.g. a bodyweight pushup + a barbell row).
   loadType: LoadType;
-  leverageFactor?: number; // required for bodyweight / weighted_bodyweight / assisted
-  intensityFactor?: number; // required for time / distance
+  limbsLoaded: 1 | 2; // dumbbell: implements held, not doubling — see load.ts
+  unilateral: boolean; // if true, reps/duration are logged per side
+  leverageFactor?: number; // required for bodyweight / weighted_bodyweight / assisted / distance
+  intensityFactor?: number; // required for time
   muscles: MuscleContribution[];
   equipment: Equipment[];
-  unilateral: boolean; // if true, reps/duration are logged per side
   referenceVolume: number;
+  defaultRestSeconds: number; // compound lifts ~180s, isolation ~60s
   components?: Exercise[]; // present only for compound (multi-exercise) movements
 }
 
@@ -93,7 +64,10 @@ export interface LoggedSet {
   reps?: number;
   durationSec?: number;
   distanceM?: number;
-  rpe?: number; // optional, 6-10, collected but not fed into XP (see spec §9.2)
+  rpe?: number; // optional, 6-10, collected but never scored (see spec §9)
+  // Snapshot at time of set, not session-level — recomputing history must
+  // never retroactively change past XP/PRs when current bodyweight changes.
+  bodyweightKg: number;
   timestamp: number;
 }
 
@@ -122,19 +96,20 @@ export function emptyBodyweightHistory(): BodyweightHistory {
 }
 
 export interface HistoryContext {
+  // A key absent from this record (as opposed to present-but-empty) means
+  // the exercise has never been logged before — the signal detectPrs uses
+  // to suppress PRs on a first-ever log (v2 §4.6) in favor of the
+  // discovery bonus.
   exerciseHistory: Record<string, ExerciseHistory>;
   // Optional — defaults to emptyBodyweightHistory() when omitted, so
   // existing callers that don't care about bodyweight PRs keep working.
   bodyweightHistory?: BodyweightHistory;
   isFirstSessionOfDay: boolean;
-  completesWeeklyTarget: boolean;
   streakWeeks: number;
 }
 
 export interface SessionInput {
   sets: LoggedSet[];
-  bodyweightKg: number;
-  history: HistoryContext;
 }
 
 export interface XpComponent {
@@ -145,7 +120,6 @@ export interface XpComponent {
 
 export interface XpBreakdown {
   total: number;
-  base: number;
   components: XpComponent[];
 }
 
@@ -163,7 +137,7 @@ export interface Pr {
 
 export interface SessionXpResult {
   total: number;
-  setBreakdowns: XpBreakdown[];
+  setBreakdowns: XpBreakdown[]; // per-set MARGINAL xp — sums exactly to total
   muscleXp: Record<MuscleId, number>;
   prs: Pr[];
   sessionBonusComponents: XpComponent[];

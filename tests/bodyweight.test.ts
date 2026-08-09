@@ -55,19 +55,16 @@ describe("recordBodyweightIntoHistory", () => {
 describe("bodyweight PRs inside a session", () => {
   it("add a session bonus and update history, without depending on any exercise", () => {
     const history: HistoryContext = {
-      exerciseHistory: {},
+      exerciseHistory: { pushup: { maxWeightKg: 0, maxVolumeSingleSet: 0, repsAtLoad: [] } },
       bodyweightHistory: recordBodyweightIntoHistory(80, emptyBodyweightHistory()),
       isFirstSessionOfDay: false,
-      completesWeeklyTarget: false,
       streakWeeks: 0,
     };
     const session: SessionInput = {
-      sets: [{ exerciseId: "pushup", reps: 10, timestamp: 0 }],
-      bodyweightKg: 79,
-      history,
+      sets: [{ exerciseId: "pushup", reps: 10, bodyweightKg: 79, timestamp: 0 }],
     };
 
-    const result = computeSessionXp(session);
+    const result = computeSessionXp(session, history);
     expect(result.prs.some((p) => p.type === "bodyweightMin")).toBe(true);
     expect(result.sessionBonusComponents.some((c) => c.label === "bodyweight low")).toBe(true);
     expect(result.updatedBodyweightHistory).toEqual({ maxBodyweightKg: 80, minBodyweightKg: 79 });
@@ -75,36 +72,30 @@ describe("bodyweight PRs inside a session", () => {
 
   it("does not fire a bodyweight PR when bodyweight is unchanged", () => {
     const history: HistoryContext = {
-      exerciseHistory: {},
+      exerciseHistory: { pushup: { maxWeightKg: 0, maxVolumeSingleSet: 0, repsAtLoad: [] } },
       bodyweightHistory: recordBodyweightIntoHistory(80, emptyBodyweightHistory()),
       isFirstSessionOfDay: false,
-      completesWeeklyTarget: false,
       streakWeeks: 0,
     };
     const session: SessionInput = {
-      sets: [{ exerciseId: "pushup", reps: 10, timestamp: 0 }],
-      bodyweightKg: 80,
-      history,
+      sets: [{ exerciseId: "pushup", reps: 10, bodyweightKg: 80, timestamp: 0 }],
     };
 
-    const result = computeSessionXp(session);
+    const result = computeSessionXp(session, history);
     expect(result.prs.some((p) => p.type === "bodyweightMax" || p.type === "bodyweightMin")).toBe(false);
   });
 
   it("defaults bodyweightHistory to empty when the caller omits it", () => {
     const history: HistoryContext = {
-      exerciseHistory: {},
+      exerciseHistory: { pushup: { maxWeightKg: 0, maxVolumeSingleSet: 0, repsAtLoad: [] } },
       isFirstSessionOfDay: false,
-      completesWeeklyTarget: false,
       streakWeeks: 0,
     };
     const session: SessionInput = {
-      sets: [{ exerciseId: "pushup", reps: 10, timestamp: 0 }],
-      bodyweightKg: 80,
-      history,
+      sets: [{ exerciseId: "pushup", reps: 10, bodyweightKg: 80, timestamp: 0 }],
     };
 
-    const result = computeSessionXp(session);
+    const result = computeSessionXp(session, history);
     expect(result.prs.some((p) => p.type === "bodyweightMax")).toBe(true);
   });
 });
