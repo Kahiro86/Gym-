@@ -42,14 +42,15 @@ export function resolveEffectiveLoad(
 // distance-based. Unilateral sets log reps/duration per side, so the total
 // work performed is double what was entered.
 function quantity(exercise: Exercise, set: LoggedSet): number {
+  const sides = exercise.unilateral ? 2 : 1;
+
   if (exercise.loadType === "time") {
-    return set.durationSec ?? 0;
+    return (set.durationSec ?? 0) * sides;
   }
   if (exercise.loadType === "distance") {
-    return set.distanceM ?? 0;
+    return (set.distanceM ?? 0) * sides;
   }
-  const reps = set.reps ?? 0;
-  return exercise.unilateral ? reps * 2 : reps;
+  return (set.reps ?? 0) * sides;
 }
 
 export function computeSetVolume(

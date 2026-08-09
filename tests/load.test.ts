@@ -98,6 +98,22 @@ describe("computeSetVolume", () => {
     expect(computeSetVolume(ex, set({ distanceM: 40 }), BW)).toBe(1600);
   });
 
+  it("doubles duration for a unilateral time-based exercise (e.g. side plank held per side)", () => {
+    const bilateral = exercise({ loadType: "time", intensityFactor: 4, unilateral: false });
+    const unilateral = exercise({ loadType: "time", intensityFactor: 4, unilateral: true });
+    const bilateralVolume = computeSetVolume(bilateral, set({ durationSec: 30 }), BW);
+    const unilateralVolume = computeSetVolume(unilateral, set({ durationSec: 30 }), BW);
+    expect(unilateralVolume).toBe(bilateralVolume * 2);
+  });
+
+  it("doubles distance for a unilateral distance-based exercise", () => {
+    const bilateral = exercise({ loadType: "distance", intensityFactor: 0.5, unilateral: false });
+    const unilateral = exercise({ loadType: "distance", intensityFactor: 0.5, unilateral: true });
+    const bilateralVolume = computeSetVolume(bilateral, set({ distanceM: 20 }), BW);
+    const unilateralVolume = computeSetVolume(unilateral, set({ distanceM: 20 }), BW);
+    expect(unilateralVolume).toBe(bilateralVolume * 2);
+  });
+
   it("never produces a negative volume even for an overassisted set", () => {
     const ex = exercise({ loadType: "assisted", leverageFactor: 1.0 });
     const volume = computeSetVolume(ex, set({ weightKg: 999, reps: 10 }), BW);

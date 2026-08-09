@@ -126,6 +126,14 @@ describe("rollup integrity", () => {
     expect(store.get("pecSternal", weekStart)!.setCount).toBe(1);
   });
 
+  it("lastTrainedAt tracks the most recent session, even if an earlier session is applied second (e.g. a backfilled log entry)", () => {
+    const weekStart = weekStartFor(MONDAY_NOON);
+    applySessionToRollup(store, sessionAt(MONDAY_NOON + 2 * DAY, 40));
+    applySessionToRollup(store, sessionAt(MONDAY_NOON, 40)); // applied later, but chronologically earlier
+
+    expect(store.get("pecSternal", weekStart)!.lastTrainedAt).toBe(MONDAY_NOON + 2 * DAY);
+  });
+
   it("a session spanning midnight lands entirely in one week bucket", () => {
     const sundayNight = Date.UTC(2026, 7, 9, 23, 58, 0); // Sunday, week before
     const mondayMorning = Date.UTC(2026, 7, 10, 0, 5, 0); // Monday, new week

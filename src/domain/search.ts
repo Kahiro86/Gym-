@@ -21,8 +21,19 @@ export function searchExercises(query: string, options: ExerciseSearchOptions = 
 function matchesFilters(exercise: Exercise, options: ExerciseSearchOptions): boolean {
   if (options.muscle && !exercise.muscles.some((m) => m.muscle === options.muscle)) return false;
   if (options.equipment && !exercise.equipment.includes(options.equipment)) return false;
-  if (options.loadType && exercise.loadType !== options.loadType) return false;
+  if (options.loadType && !hasLoadType(exercise, options.loadType)) return false;
   return true;
+}
+
+// exercise.loadType is only the first component's type for a compound
+// (advisory/display only — see types.ts) — a mixed-load-type compound can
+// contain a real match for `loadType` in a non-first component, so this
+// has to walk the whole component tree rather than trust the top-level field.
+function hasLoadType(exercise: Exercise, loadType: LoadType): boolean {
+  if (exercise.components) {
+    return exercise.components.some((c) => hasLoadType(c, loadType));
+  }
+  return exercise.loadType === loadType;
 }
 
 function relevance(exercise: Exercise, q: string): number {

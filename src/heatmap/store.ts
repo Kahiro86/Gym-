@@ -135,7 +135,7 @@ export function applySessionToRollup(store: MuscleRollupStore, session: HeatmapS
         totalVolume: existing.totalVolume + volume,
         setCount: existing.setCount + 1,
         sessionCount: existing.sessionCount + (touchedThisSession.has(muscleId) ? 0 : 1),
-        lastTrainedAt: startMs,
+        lastTrainedAt: Math.max(existing.lastTrainedAt ?? 0, startMs),
       });
       touchedThisSession.add(muscleId);
     }

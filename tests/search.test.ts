@@ -67,6 +67,19 @@ describe("searchExercises", () => {
     expect(results.length).toBeGreaterThan(0);
   });
 
+  it("filters a mixed-load-type compound by a non-first component's loadType", () => {
+    // compound's own (advisory) loadType is "barbell" (first component),
+    // but it genuinely contains a "time" component (side-plank) too.
+    const compound = createCompoundExercise("row-plank-combo", "Row + Plank Combo", ["barbell-row", "side-plank"]);
+    expect(compound.loadType).toBe("barbell");
+
+    const timeResults = searchExercises("", { loadType: "time" });
+    expect(timeResults.map((e) => e.id)).toContain("row-plank-combo");
+
+    const barbellResults = searchExercises("", { loadType: "barbell" });
+    expect(barbellResults.map((e) => e.id)).toContain("row-plank-combo");
+  });
+
   it("includes newly created compound exercises once registered", () => {
     expect(searchExercises("thruster combo")).toEqual([]);
     createCompoundExercise("thruster-combo", "Thruster Combo", ["pushup", "bodyweight-squat"], {
