@@ -5,6 +5,16 @@ export function resolveEffectiveLoad(
   set: LoggedSet,
   bodyweightKg: number
 ): number {
+  if (exercise.components) {
+    // Every loadType's effective load already comes out in the same
+    // kg-equivalent unit, so summing across mixed-loadType components stays
+    // dimensionally meaningful (e.g. a bodyweight pushup + a barbell row).
+    return exercise.components.reduce(
+      (sum, component) => sum + resolveEffectiveLoad(component, set, bodyweightKg),
+      0
+    );
+  }
+
   const entered = set.weightKg ?? 0;
 
   switch (exercise.loadType) {
@@ -47,6 +57,17 @@ export function computeSetVolume(
   set: LoggedSet,
   bodyweightKg: number
 ): number {
+  if (exercise.components) {
+    // Each component computes its own load x its own quantity (reps, secs,
+    // or meters) independently, then the set's total volume is their sum —
+    // this is what lets a compound mix reps-based and time-based movements
+    // in one LoggedSet.
+    return Math.max(
+      0,
+      exercise.components.reduce((sum, component) => sum + computeSetVolume(component, set, bodyweightKg), 0)
+    );
+  }
+
   const load = resolveEffectiveLoad(exercise, set, bodyweightKg);
   const qty = quantity(exercise, set);
   return Math.max(0, load * qty);

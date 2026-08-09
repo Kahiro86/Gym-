@@ -13,7 +13,7 @@ export function detectPrs(
   const volume = computeSetVolume(exercise, set, bodyweightKg);
   const prs: Pr[] = [];
 
-  if (exercise.loadType !== "time" && effectiveLoad > h.maxWeightKg) {
+  if (!isLoadFree(exercise) && effectiveLoad > h.maxWeightKg) {
     prs.push({
       type: "weight",
       exerciseId: exercise.id,
@@ -22,10 +22,7 @@ export function detectPrs(
     });
   }
 
-  if (
-    (exercise.loadType !== "time" && exercise.loadType !== "distance") &&
-    set.reps !== undefined
-  ) {
+  if (usesReps(exercise) && set.reps !== undefined) {
     const bestRepsAtOrAbove = h.repsAtLoad
       .filter((r) => r.loadKg >= effectiveLoad)
       .reduce((max, r) => Math.max(max, r.reps), 0);
@@ -50,6 +47,18 @@ export function detectPrs(
   }
 
   return prs;
+}
+
+// A compound is "load-free" only if every one of its components is (i.e.
+// entirely made of time-based holds); it "uses reps" if any component does.
+function isLoadFree(exercise: Exercise): boolean {
+  if (exercise.components) return exercise.components.every(isLoadFree);
+  return exercise.loadType === "time";
+}
+
+function usesReps(exercise: Exercise): boolean {
+  if (exercise.components) return exercise.components.some(usesReps);
+  return exercise.loadType !== "time" && exercise.loadType !== "distance";
 }
 
 export function recordSetIntoHistory(

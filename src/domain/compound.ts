@@ -1,17 +1,15 @@
 import { getExercise as getSeedExercise } from "./catalog.js";
-import type { Exercise, LoadType, MuscleContribution, MuscleId } from "./types.js";
+import type { Exercise, MuscleContribution, MuscleId } from "./types.js";
 
 // A compound exercise is a derived Exercise built from 2+ existing exercises
-// performed together as one movement (e.g. a barbell complex, or a bodyweight
-// combo like squat+pushup+jump). It reuses the same effective-load formula as
-// its components, so it plugs into load.ts/xp.ts/prs.ts unmodified — see
-// registry.ts for how it's made visible to computeSessionXp and search.
-//
-// This only works because, for a shared loadType, each component's
-// contribution to volume is additive: e.g. for bodyweight, effectiveLoad =
-// bodyweightKg * leverage, so summing leverageFactor across components and
-// applying the *same* reps/duration to all of them reproduces the sum of
-// each component's own volume exactly.
+// performed together as one movement (e.g. a barbell complex, or a mixed
+// combo like a bodyweight pushup + a barbell row). Its `components` array
+// (see types.ts) lets load.ts recurse into each component's own effective
+// load and volume independently and sum the results — so components can
+// freely mix load types, since each one reads only the LoggedSet fields its
+// own loadType needs. `loadType`/`leverageFactor`/`intensityFactor` on the
+// compound itself are left as advisory-only display hints and are never
+// used for computation once `components` is set.
 
 export interface CompoundComponentSpec {
   exerciseId: string;
@@ -58,32 +56,17 @@ export function createCompoundExercise(
     return { exercise, emphasis: spec.emphasis ?? 1 };
   });
 
-  const loadType: LoadType = components_[0]!.exercise.loadType;
-  for (const { exercise } of components_) {
-    if (exercise.loadType !== loadType) {
-      throw new Error(
-        `Compound exercises require every component to share the same load type; got "${loadType}" and "${exercise.loadType}" (${exercise.id})`
-      );
-    }
-  }
-
   const compound: Exercise = {
     id,
     name,
     aliases: options.aliases ?? [],
-    loadType,
+    loadType: components_[0]!.exercise.loadType,
     muscles: blendMuscleContributions(components_),
     equipment: dedupe(components_.flatMap((c) => c.exercise.equipment)),
     unilateral: components_.some((c) => c.exercise.unilateral),
     referenceVolume: components_.reduce((sum, c) => sum + c.exercise.referenceVolume, 0),
+    components: components_.map((c) => c.exercise),
   };
-
-  if (loadType === "bodyweight" || loadType === "weighted_bodyweight" || loadType === "assisted") {
-    compound.leverageFactor = components_.reduce((sum, c) => sum + (c.exercise.leverageFactor ?? 0), 0);
-  }
-  if (loadType === "time" || loadType === "distance") {
-    compound.intensityFactor = components_.reduce((sum, c) => sum + (c.exercise.intensityFactor ?? 0), 0);
-  }
 
   compoundRegistry.set(id, compound);
   return compound;

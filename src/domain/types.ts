@@ -72,6 +72,11 @@ export interface Exercise {
   id: string;
   name: string;
   aliases: string[];
+  // For a compound exercise (components present), loadType is only the
+  // first component's type — advisory/display only. Volume and effective
+  // load always recurse into `components` instead of using this exercise's
+  // own loadType/leverageFactor/intensityFactor, so a compound can freely
+  // mix load types (e.g. a bodyweight pushup + a barbell row).
   loadType: LoadType;
   leverageFactor?: number; // required for bodyweight / weighted_bodyweight / assisted
   intensityFactor?: number; // required for time / distance
@@ -79,6 +84,7 @@ export interface Exercise {
   equipment: Equipment[];
   unilateral: boolean; // if true, reps/duration are logged per side
   referenceVolume: number;
+  components?: Exercise[]; // present only for compound (multi-exercise) movements
 }
 
 export interface LoggedSet {

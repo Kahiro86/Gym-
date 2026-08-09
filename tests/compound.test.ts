@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createCompoundExercise, getCompoundExercise, listCompoundExercises, clearCompoundRegistry } from "../src/domain/compound.js";
 import { requireExercise } from "../src/domain/registry.js";
+import { computeSetVolume } from "../src/domain/load.js";
 import { computeSessionXp } from "../src/domain/xp.js";
+import { detectPrs } from "../src/domain/prs.js";
 import { emptyExerciseHistory, MUSCLE_IDS } from "../src/domain/types.js";
-import type { HistoryContext, SessionInput } from "../src/domain/types.js";
+import type { HistoryContext, LoggedSet, SessionInput } from "../src/domain/types.js";
 
 beforeEach(() => {
   clearCompoundRegistry();
@@ -22,10 +24,9 @@ describe("createCompoundExercise", () => {
     expect(() => createCompoundExercise("bad", "Bad", ["pushup", "not-a-real-exercise"])).toThrow(/Unknown component/);
   });
 
-  it("rejects mismatched load types", () => {
-    expect(() => createCompoundExercise("mixed", "Mixed", ["pushup", "barbell-bench-press"])).toThrow(
-      /same load type/
-    );
+  it("allows mixing load types (e.g. a bodyweight pushup + a barbell row)", () => {
+    const compound = createCompoundExercise("mixed", "Mixed", ["pushup", "barbell-row"]);
+    expect(compound.components?.map((c) => c.id)).toEqual(["pushup", "barbell-row"]);
   });
 
   it("rejects an id that's already taken by the seed catalog", () => {
@@ -50,14 +51,13 @@ describe("createCompoundExercise", () => {
     expect(muscleSet.has("quads")).toBe(true);
   });
 
-  it("sums referenceVolume and leverageFactor across bodyweight components", () => {
+  it("sums referenceVolume across components and embeds them for load.ts to recurse into", () => {
     const pushup = requireExercise("pushup");
     const squat = requireExercise("bodyweight-squat");
     const compound = createCompoundExercise("squat-thrust-2", "Squat Thrust 2", ["pushup", "bodyweight-squat"]);
 
     expect(compound.referenceVolume).toBe(pushup.referenceVolume + squat.referenceVolume);
-    expect(compound.leverageFactor).toBeCloseTo(pushup.leverageFactor! + squat.leverageFactor!);
-    expect(compound.loadType).toBe("bodyweight");
+    expect(compound.components).toEqual([pushup, squat]);
   });
 
   it("is unilateral if any component is unilateral", () => {
@@ -86,6 +86,48 @@ describe("createCompoundExercise", () => {
   it("resolves through the unified registry alongside seed exercises", () => {
     createCompoundExercise("combo-c", "Combo C", ["pushup", "bodyweight-squat"]);
     expect(requireExercise("combo-c").name).toBe("Combo C");
+  });
+});
+
+describe("mixed load-type compounds", () => {
+  it("sums each component's own volume, reading the fields each loadType needs from one shared set", () => {
+    const pushup = requireExercise("pushup");
+    const row = requireExercise("barbell-row");
+    const compound = createCompoundExercise("pushup-row", "Pushup + Row", ["pushup", "barbell-row"]);
+
+    const set: LoggedSet = { exerciseId: compound.id, weightKg: 50, reps: 8, timestamp: 0 };
+    const bodyweightKg = 80;
+
+    const expected = computeSetVolume(pushup, set, bodyweightKg) + computeSetVolume(row, set, bodyweightKg);
+    expect(computeSetVolume(compound, set, bodyweightKg)).toBeCloseTo(expected);
+  });
+
+  it("still detects rep PRs when only some components are reps-based", () => {
+    const compound = createCompoundExercise("pushup-row-2", "Pushup + Row 2", ["pushup", "barbell-row"]);
+    const set: LoggedSet = { exerciseId: compound.id, weightKg: 50, reps: 8, timestamp: 0 };
+    const prs = detectPrs(compound, set, undefined, 80);
+    expect(prs.some((p) => p.type === "rep")).toBe(true);
+  });
+
+  it("supports a time-based component alongside a reps-based one", () => {
+    const compound = createCompoundExercise("pushup-plank", "Pushup + Plank Hold", ["pushup", "plank"]);
+    const set: LoggedSet = { exerciseId: compound.id, reps: 10, durationSec: 30, timestamp: 0 };
+    const volume = computeSetVolume(compound, set, 80);
+    expect(volume).toBeGreaterThan(0);
+    expect(Number.isNaN(volume)).toBe(false);
+  });
+
+  it("supports nested compounds (a compound made of a compound)", () => {
+    const inner = createCompoundExercise("inner-combo", "Inner Combo", ["pushup", "bodyweight-squat"]);
+    const outer = createCompoundExercise("outer-combo", "Outer Combo", [inner.id, "plank"]);
+
+    const set: LoggedSet = { exerciseId: outer.id, reps: 10, durationSec: 20, timestamp: 0 };
+    const volume = computeSetVolume(outer, set, 80);
+    expect(volume).toBeGreaterThan(0);
+    expect(Number.isNaN(volume)).toBe(false);
+
+    const total = outer.muscles.reduce((sum, m) => sum + m.share, 0);
+    expect(total).toBeCloseTo(1.0, 5);
   });
 });
 
