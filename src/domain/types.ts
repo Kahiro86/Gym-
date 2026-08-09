@@ -112,8 +112,20 @@ export function emptyExerciseHistory(): ExerciseHistory {
   return { maxWeightKg: 0, maxVolumeSingleSet: 0, repsAtLoad: [] };
 }
 
+export interface BodyweightHistory {
+  maxBodyweightKg: number;
+  minBodyweightKg: number;
+}
+
+export function emptyBodyweightHistory(): BodyweightHistory {
+  return { maxBodyweightKg: 0, minBodyweightKg: Infinity };
+}
+
 export interface HistoryContext {
   exerciseHistory: Record<string, ExerciseHistory>;
+  // Optional — defaults to emptyBodyweightHistory() when omitted, so
+  // existing callers that don't care about bodyweight PRs keep working.
+  bodyweightHistory?: BodyweightHistory;
   isFirstSessionOfDay: boolean;
   completesWeeklyTarget: boolean;
   streakWeeks: number;
@@ -137,10 +149,13 @@ export interface XpBreakdown {
   components: XpComponent[];
 }
 
-export type PrType = "weight" | "rep" | "volume";
+export type PrType = "weight" | "rep" | "volume" | "bodyweightMax" | "bodyweightMin";
 
 export interface Pr {
   type: PrType;
+  // For bodyweightMax/bodyweightMin this is BODYWEIGHT_PR_SUBJECT (see
+  // bodyweight.ts), not a real catalog id — bodyweight PRs aren't tied to
+  // any exercise.
   exerciseId: string;
   value: number;
   previousBest: number;
@@ -153,6 +168,7 @@ export interface SessionXpResult {
   prs: Pr[];
   sessionBonusComponents: XpComponent[];
   updatedExerciseHistory: Record<string, ExerciseHistory>;
+  updatedBodyweightHistory: BodyweightHistory;
 }
 
 export type Rank = "F" | "E" | "D" | "C" | "B" | "A" | "S";

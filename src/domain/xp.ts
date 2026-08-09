@@ -1,5 +1,6 @@
 import { computeSetVolume } from "./load.js";
 import { detectPrs, recordSetIntoHistory } from "./prs.js";
+import { detectBodyweightPrs, recordBodyweightIntoHistory } from "./bodyweight.js";
 import { requireExercise } from "./registry.js";
 import { MUSCLE_IDS } from "./types.js";
 import type {
@@ -21,12 +22,16 @@ const PR_BONUS: Record<PrType, number> = {
   weight: 15,
   rep: 10,
   volume: 10,
+  bodyweightMax: 15,
+  bodyweightMin: 15,
 };
 
 const PR_LABEL: Record<PrType, string> = {
   weight: "weight PR",
   rep: "rep PR",
   volume: "volume PR",
+  bodyweightMax: "bodyweight high",
+  bodyweightMin: "bodyweight low",
 };
 
 const SESSION_FIRST_BONUS = 5;
@@ -155,6 +160,17 @@ export function computeSessionXp(session: SessionInput): SessionXpResult {
 
   const sessionBonusComponents: XpComponent[] = [];
 
+  const bodyweightPrs = detectBodyweightPrs(session.bodyweightKg, session.history.bodyweightHistory);
+  for (const pr of bodyweightPrs) {
+    allPrs.push(pr);
+    sessionBonusComponents.push({
+      label: PR_LABEL[pr.type],
+      amount: PR_BONUS[pr.type],
+      reason: `new ${pr.type === "bodyweightMax" ? "highest" : "lowest"} bodyweight ever (${pr.previousBest} → ${pr.value})`,
+    });
+    total += PR_BONUS[pr.type];
+  }
+
   if (session.history.completesWeeklyTarget) {
     sessionBonusComponents.push({
       label: "weekly target",
@@ -182,5 +198,6 @@ export function computeSessionXp(session: SessionInput): SessionXpResult {
     prs: allPrs,
     sessionBonusComponents,
     updatedExerciseHistory: runningHistory,
+    updatedBodyweightHistory: recordBodyweightIntoHistory(session.bodyweightKg, session.history.bodyweightHistory),
   };
 }

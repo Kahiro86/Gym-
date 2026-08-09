@@ -22,8 +22,8 @@ exports[`golden file — 12-week training log > produces a stable snapshot of le
     "traps": "unranked",
     "triceps": "D",
   },
-  "prCount": 145,
+  "prCount": 146,
   "sessionCount": 36,
-  "totalXp": 4887,
+  "totalXp": 4902,
 }
 `;

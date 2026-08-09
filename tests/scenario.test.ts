@@ -126,7 +126,11 @@ describe("golden file — 12-week training log", () => {
         prCount += result.prs.length;
         for (const muscle of MUSCLE_IDS) muscleXpTotals[muscle]! += result.muscleXp[muscle];
 
-        history = { ...history, exerciseHistory: result.updatedExerciseHistory };
+        history = {
+          ...history,
+          exerciseHistory: result.updatedExerciseHistory,
+          bodyweightHistory: result.updatedBodyweightHistory,
+        };
       }
     }
 

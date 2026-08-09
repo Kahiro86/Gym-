@@ -23,5 +23,20 @@ export type { SetXpContext } from "./xp.js";
 export { xpRequiredForLevel, levelFromTotalXp, rankForMuscleXp } from "./progression.js";
 export type { LevelProgress } from "./progression.js";
 export { detectPrs, recordSetIntoHistory } from "./prs.js";
+export { detectBodyweightPrs, recordBodyweightIntoHistory, BODYWEIGHT_PR_SUBJECT } from "./bodyweight.js";
 export { aggregateMuscleXp, aggregateSessionTotals } from "./aggregate.js";
 export type { SessionTotals } from "./aggregate.js";
+export {
+  ACHIEVEMENTS,
+  getAchievementDefinition,
+  evaluateAchievements,
+  resolveAchievementRewards,
+  emptyPrCounts,
+} from "./achievements.js";
+export type {
+  Reward,
+  PlayerStats,
+  AchievementDefinition,
+  UnlockedAchievement,
+  AchievementUnlockResult,
+} from "./achievements.js";
