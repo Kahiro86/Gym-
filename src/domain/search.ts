@@ -12,7 +12,7 @@ export function searchExercises(query: string, options: ExerciseSearchOptions = 
 
   return allExercises()
     .filter((exercise) => matchesFilters(exercise, options))
-    .map((exercise) => ({ exercise, score: relevance(exercise, q) }))
+    .map((exercise) => ({ exercise, score: scoreExerciseMatch(exercise, q) }))
     .filter((entry) => q === "" || entry.score > 0)
     .sort((a, b) => b.score - a.score || a.exercise.name.localeCompare(b.exercise.name))
     .map((entry) => entry.exercise);
@@ -36,7 +36,10 @@ function hasLoadType(exercise: Exercise, loadType: LoadType): boolean {
   return exercise.loadType === loadType;
 }
 
-function relevance(exercise: Exercise, q: string): number {
+// Exported so Layer 2 can rank a list that includes rows searchExercises
+// never sees (locally stored custom exercises) with identical scoring —
+// the query itself, already lowercased/trimmed, is the contract between them.
+export function scoreExerciseMatch(exercise: Exercise, q: string): number {
   if (q === "") return 1;
 
   const name = exercise.name.toLowerCase();

@@ -10,7 +10,7 @@ export {
   clearCompoundRegistry,
 } from "./compound.js";
 export type { CompoundComponentSpec } from "./compound.js";
-export { searchExercises } from "./search.js";
+export { searchExercises, scoreExerciseMatch } from "./search.js";
 export type { ExerciseSearchOptions } from "./search.js";
 export { resolveEffectiveLoad, computeSetVolume, DISTANCE_SCALE } from "./load.js";
 export { computeSessionXp, streakMultiplier, XP_CONSTANT } from "./xp.js";
