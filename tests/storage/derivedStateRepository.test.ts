@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { GymDatabase, ENGINE_VERSION } from "../../src/storage/db.js";
 import { createDerivedStateRepository } from "../../src/storage/repositories/derivedStateRepository.js";
 import { createSetRepository } from "../../src/storage/repositories/setRepository.js";
+import { seedDevHistory } from "../../src/storage/devSeed.js";
 import { computeSessionXp } from "../../src/domain/xp.js";
 import { MUSCLE_IDS } from "../../src/domain/muscles.js";
 import { emptyExerciseHistory } from "../../src/domain/types.js";
@@ -157,28 +158,12 @@ describe("DerivedStateRepository", () => {
 
   it("rebuild after a wipe reproduces byte-identical caches (12-week history)", async () => {
     const db = new GymDatabase(uniqueDbName());
-    const sets = createSetRepository(db);
     const derived = createDerivedStateRepository(db);
-    const exercises = [BENCH, SQUAT];
 
-    for (let week = 0; week < 12; week++) {
-      for (let day = 0; day < 3; day++) {
-        const sessionId = `w${week}d${day}`;
-        const startedAt = week * WEEK + day * 2 * DAY;
-        await addSession(db, sessionId, startedAt);
-        for (let setIdx = 0; setIdx < 4; setIdx++) {
-          const exerciseId = exercises[(week + day + setIdx) % exercises.length]!;
-          await sets.log({
-            sessionId,
-            exerciseId,
-            weightKg: 60 + week,
-            reps: 5,
-            bodyweightKgAtTime: 80,
-            loggedAt: startedAt + setIdx * 60,
-          });
-        }
-      }
-    }
+    // The shared dev-history generator (task 12) — realistic enough to be
+    // this task's own guarantee: §2.1 (rebuild-is-a-no-op) must hold over
+    // exactly the fixture data used elsewhere for golden-file tests.
+    await seedDevHistory(db, { startedAt: 0, weeks: 12 });
 
     await derived.rebuildDerivedState();
     const snapshotXp = await derived.getAllMuscleXp();
