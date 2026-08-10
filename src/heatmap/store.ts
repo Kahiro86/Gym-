@@ -1,6 +1,7 @@
 import { MUSCLES, getMuscle } from "../domain/muscles.js";
 import { computeCardioMuscleVolume, CARDIO_CAP } from "../domain/cardio.js";
 import { computeSetMuscleVolumes } from "./volume.js";
+import { weekStartFor, addWeeks, MS_PER_DAY } from "../shared/dates.js";
 import type { MuscleId } from "../domain/muscles.js";
 import type { CardioLog } from "../domain/cardio.js";
 import type { LoggedSet } from "../domain/types.js";
@@ -9,27 +10,7 @@ import type { LoggedSet } from "../domain/types.js";
 // normalization are never stored (§5) — only these raw components — so
 // changing tau_days or volume_floor never requires a backfill.
 
-const MS_PER_DAY = 86_400_000;
-
-export function weekStartFor(timestampMs: number): string {
-  const date = new Date(timestampMs);
-  const utc = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-  const dayOfWeek = utc.getUTCDay(); // 0=Sun..6=Sat
-  const daysSinceMonday = (dayOfWeek + 6) % 7; // Mon=0
-  utc.setUTCDate(utc.getUTCDate() - daysSinceMonday);
-  return isoDate(utc);
-}
-
-export function addWeeks(weekStart: string, weeks: number): string {
-  const date = new Date(`${weekStart}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + weeks * 7);
-  return isoDate(date);
-}
-
-function isoDate(date: Date): string {
-  const iso = date.toISOString();
-  return iso.slice(0, 10);
-}
+export { weekStartFor, addWeeks, MS_PER_DAY };
 
 export interface MuscleWeekRollupRow {
   muscleId: MuscleId;
@@ -178,5 +159,3 @@ export function recomputeWeekRollup(store: MuscleRollupStore, weekStart: string,
     applySessionToRollup(store, session);
   }
 }
-
-export { MS_PER_DAY };
