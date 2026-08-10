@@ -1,16 +1,20 @@
 {
-  "name": "athlete-rpg-domain",
+  "name": "gymxp",
   "private": true,
   "version": "0.1.0",
-  "description": "Layer 1 domain core: exercise catalog, XP engine, progression curves, PR detection. No UI, no database, no network.",
+  "description": "GymXP: Layer 1 domain core (XP engine, catalog, progression), Layer 2 heatmap + storage. No UI, no network.",
   "type": "module",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {},
+  "dependencies": {
+    "dexie": "^4.4.4",
+    "uuidv7": "^1.2.1"
+  },
   "devDependencies": {
+    "fake-indexeddb": "^6.2.5",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
   }
