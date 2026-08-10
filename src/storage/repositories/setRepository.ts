@@ -1,7 +1,11 @@
 import { newId, now } from "../ids.js";
 import { enqueueSync } from "../syncQueue.js";
+import { getExercise } from "../../domain/registry.js";
+import { recordSetIntoHistory } from "../../domain/prs.js";
+import { emptyExerciseHistory } from "../../domain/types.js";
 import type { GymDatabase } from "../db.js";
-import type { SetRecord } from "../types.js";
+import type { SessionRecord, SetRecord } from "../types.js";
+import type { ExerciseHistory, LoggedSet } from "../../domain/types.js";
 
 export interface NewSet {
   sessionId: string;
@@ -15,6 +19,11 @@ export interface NewSet {
   loggedAt: number;
 }
 
+// bestEverFor's return value: the same shape Layer 1 folds sets into
+// (recordSetIntoHistory) — a repository just replays a set's own history
+// back out of storage instead of tracking it forward.
+export type PrSnapshot = ExerciseHistory;
+
 export interface SetRepository {
   log(input: NewSet): Promise<SetRecord>;
   update(id: string, patch: Partial<NewSet>): Promise<SetRecord>;
@@ -23,6 +32,26 @@ export interface SetRepository {
   // orderIndex (below) tracks position *within an exercise*, for reordering
   // that exercise's own set list — a separate concern from session order.
   listBySession(sessionId: string): Promise<SetRecord[]>;
+
+  // The critical query — powers progressive overload ("what did I lift
+  // last time on this exercise"). Backed by the [exerciseId+loggedAt]
+  // index; must stay well under the UI's per-keystroke budget.
+  lastPerformance(exerciseId: string, beforeSessionId?: string): Promise<{ session: SessionRecord; sets: SetRecord[] } | null>;
+
+  bestEverFor(exerciseId: string): Promise<PrSnapshot>;
+}
+
+function toLoggedSet(record: SetRecord): LoggedSet {
+  return {
+    exerciseId: record.exerciseId,
+    weightKg: record.weightKg ?? undefined,
+    reps: record.reps ?? undefined,
+    durationSec: record.durationSec ?? undefined,
+    distanceM: record.distanceM ?? undefined,
+    rpe: record.rpe ?? undefined,
+    bodyweightKg: record.bodyweightKgAtTime,
+    timestamp: record.loggedAt,
+  };
 }
 
 // orderIndex is scoped to (sessionId, exerciseId): set 1, 2, 3 of *this*
@@ -115,6 +144,43 @@ export function createSetRepository(db: GymDatabase): SetRepository {
         .equals(sessionId)
         .filter((s) => s.deletedAt === null)
         .sortBy("loggedAt");
+    },
+
+    async lastPerformance(exerciseId, beforeSessionId) {
+      // [exerciseId+loggedAt] bounds the range scan to just this exercise's
+      // rows. Deliberately no .filter() chained onto the Dexie query itself
+      // — that forces per-row cursor gets instead of one bulk fetch, which
+      // is orders of magnitude slower than filtering the (already small,
+      // index-bounded) result in plain JS afterward.
+      const rows = (
+        await db.sets.where("[exerciseId+loggedAt]").between([exerciseId, -Infinity], [exerciseId, Infinity]).toArray()
+      ).filter((s) => s.deletedAt === null && s.sessionId !== beforeSessionId);
+      if (rows.length === 0) return null;
+
+      const latestSessionId = rows.reduce((latest, s) => (s.loggedAt > latest.loggedAt ? s : latest)).sessionId;
+      const session = await db.sessions.get(latestSessionId);
+      if (!session || session.deletedAt !== null) return null;
+
+      const sets = rows.filter((s) => s.sessionId === latestSessionId).sort((a, b) => a.orderIndex - b.orderIndex);
+      return { session, sets };
+    },
+
+    async bestEverFor(exerciseId) {
+      const exercise = getExercise(exerciseId);
+      if (!exercise) {
+        throw new Error(`Unknown exercise id: ${exerciseId}`);
+      }
+
+      // See the note in lastPerformance() above — filter in JS, not Dexie.
+      const rows = (
+        await db.sets.where("[exerciseId+loggedAt]").between([exerciseId, -Infinity], [exerciseId, Infinity]).toArray()
+      ).filter((s) => s.deletedAt === null);
+
+      let history: ExerciseHistory | undefined;
+      for (const row of rows) {
+        history = recordSetIntoHistory(exercise, toLoggedSet(row), history);
+      }
+      return history ?? emptyExerciseHistory();
     },
   };
 }
