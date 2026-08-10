@@ -7,6 +7,7 @@ import { createSetRepository } from "../../src/storage/repositories/setRepositor
 import { createBodyweightRepository } from "../../src/storage/repositories/bodyweightRepository.js";
 import { createExerciseRepository } from "../../src/storage/repositories/exerciseRepository.js";
 import { createDerivedStateRepository } from "../../src/storage/repositories/derivedStateRepository.js";
+import { seedDevHistory } from "../../src/storage/devSeed.js";
 
 function uniqueDbName(): string {
   return `test-db-${Math.random().toString(36).slice(2)}`;
@@ -171,5 +172,41 @@ describe("export/import", () => {
       source.close();
       target.close();
     });
+  });
+
+  // Spec §11 DoD: "Export -> wipe -> import round-trips a 12-week history
+  // with no loss." Same database throughout — this is the backup/restore
+  // story, not a cross-device migration.
+  it("export -> wipe -> import round-trips a 12-week history with no loss", async () => {
+    const db = new GymDatabase(uniqueDbName());
+    await seedCatalog(db);
+    await seedDevHistory(db, { startedAt: 0, weeks: 12 });
+    const derived = createDerivedStateRepository(db);
+    await derived.rebuildDerivedState();
+
+    const bundle = await exportData(db);
+    const preWipeXp = await derived.getAllMuscleXp();
+    const preWipeBenchPr = await derived.getPrSnapshot(BENCH);
+
+    await db.exercises.clear();
+    await db.sessions.clear();
+    await db.sets.clear();
+    await db.bodyweightLog.clear();
+    await db.settings.clear();
+    await db.prCache.clear();
+    await db.muscleXpCache.clear();
+    expect(await db.sessions.count()).toBe(0);
+
+    const result = await importData(db, bundle);
+    expect(result.sessions).toBe(36);
+    expect(result.sets).toBe(216);
+    expect(result.bodyweightLog).toBe(36);
+    expect(await db.exercises.count()).toBe(bundle.exercises.length);
+
+    // importData rebuilds the caches itself — no loss relative to the
+    // pre-wipe snapshot.
+    expect(await derived.getAllMuscleXp()).toEqual(preWipeXp);
+    expect(await derived.getPrSnapshot(BENCH)).toEqual(preWipeBenchPr);
+    db.close();
   });
 });
