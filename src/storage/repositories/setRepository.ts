@@ -1,11 +1,12 @@
 import { newId, now } from "../ids.js";
 import { enqueueSync } from "../syncQueue.js";
+import { toLoggedSet } from "../convert.js";
 import { getExercise } from "../../domain/registry.js";
 import { recordSetIntoHistory } from "../../domain/prs.js";
 import { emptyExerciseHistory } from "../../domain/types.js";
 import type { GymDatabase } from "../db.js";
 import type { SessionRecord, SetRecord } from "../types.js";
-import type { ExerciseHistory, LoggedSet } from "../../domain/types.js";
+import type { ExerciseHistory } from "../../domain/types.js";
 
 export interface NewSet {
   sessionId: string;
@@ -39,19 +40,6 @@ export interface SetRepository {
   lastPerformance(exerciseId: string, beforeSessionId?: string): Promise<{ session: SessionRecord; sets: SetRecord[] } | null>;
 
   bestEverFor(exerciseId: string): Promise<PrSnapshot>;
-}
-
-function toLoggedSet(record: SetRecord): LoggedSet {
-  return {
-    exerciseId: record.exerciseId,
-    weightKg: record.weightKg ?? undefined,
-    reps: record.reps ?? undefined,
-    durationSec: record.durationSec ?? undefined,
-    distanceM: record.distanceM ?? undefined,
-    rpe: record.rpe ?? undefined,
-    bodyweightKg: record.bodyweightKgAtTime,
-    timestamp: record.loggedAt,
-  };
 }
 
 // orderIndex is scoped to (sessionId, exerciseId): set 1, 2, 3 of *this*
