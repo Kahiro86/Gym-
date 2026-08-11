@@ -304,4 +304,89 @@ describe("DerivedStateRepository", () => {
       db.close();
     });
   });
+
+  describe("getHistoryContextForSession", () => {
+    it("returns an empty history and isFirstSessionOfDay: true for the very first session ever", async () => {
+      const db = new GymDatabase(uniqueDbName());
+      const derived = createDerivedStateRepository(db);
+      const { session } = await setupSessionExercise(db, BENCH, 0);
+
+      const context = await derived.getHistoryContextForSession(session.id);
+      expect(context).toEqual({ exerciseHistory: {}, bodyweightHistory: undefined, isFirstSessionOfDay: true, streakWeeks: 0 });
+      db.close();
+    });
+
+    it("reflects prior sessions' sets, matching a manual replay via computeSessionXp", async () => {
+      const db = new GymDatabase(uniqueDbName());
+      const sets = createSetRepository(db);
+      const derived = createDerivedStateRepository(db);
+
+      const { sessionExercise: se1 } = await setupSessionExercise(db, BENCH, 0);
+      await sets.log({ sessionExerciseId: se1.id, weightKg: 60, reps: 5, bodyweightKgAtTime: 80, loggedAt: 0 });
+      await finishSession(db, se1.sessionId, 100);
+
+      const { session: session2 } = await setupSessionExercise(db, BENCH, 3 * 60 * 60 * 1000);
+
+      const context = await derived.getHistoryContextForSession(session2.id);
+      const expected = computeSessionXp(
+        { sets: [{ exerciseId: BENCH, weightKg: 60, reps: 5, bodyweightKg: 80, timestamp: 0 }] },
+        { exerciseHistory: {}, isFirstSessionOfDay: true, streakWeeks: 0 }
+      );
+
+      expect(context.exerciseHistory[BENCH]).toEqual(expected.updatedExerciseHistory[BENCH]);
+      expect(context.isFirstSessionOfDay).toBe(false); // same day as session1
+      db.close();
+    });
+
+    it("key-absence (not an empty-stats row) signals an exercise never logged before, matching HistoryContext's contract", async () => {
+      const db = new GymDatabase(uniqueDbName());
+      const sets = createSetRepository(db);
+      const derived = createDerivedStateRepository(db);
+
+      const { sessionExercise: se1 } = await setupSessionExercise(db, BENCH, 0);
+      await sets.log({ sessionExerciseId: se1.id, weightKg: 60, reps: 5, bodyweightKgAtTime: 80, loggedAt: 0 });
+      await finishSession(db, se1.sessionId, 100);
+
+      const { session: session2 } = await setupSessionExercise(db, SQUAT, 1000);
+      const context = await derived.getHistoryContextForSession(session2.id);
+
+      expect(BENCH in context.exerciseHistory).toBe(true);
+      expect(SQUAT in context.exerciseHistory).toBe(false);
+      db.close();
+    });
+
+    it("computes streakWeeks matching a manual replay for a session several weeks into a streak", async () => {
+      const db = new GymDatabase(uniqueDbName());
+      const sets = createSetRepository(db);
+      const derived = createDerivedStateRepository(db);
+
+      const a = await setupSessionExercise(db, BENCH, 0);
+      await sets.log({ sessionExerciseId: a.sessionExercise.id, weightKg: 60, reps: 5, bodyweightKgAtTime: 80, loggedAt: 0 });
+      await finishSession(db, a.session.id, 100);
+
+      const { session: sessionC } = await setupSessionExercise(db, BENCH, 8 * DAY);
+      const context = await derived.getHistoryContextForSession(sessionC.id);
+
+      expect(context.isFirstSessionOfDay).toBe(true);
+      expect(context.streakWeeks).toBe(1);
+      db.close();
+    });
+
+    it("throws for a session that does not exist", async () => {
+      const db = new GymDatabase(uniqueDbName());
+      const derived = createDerivedStateRepository(db);
+      await expect(derived.getHistoryContextForSession("does-not-exist")).rejects.toThrow();
+      db.close();
+    });
+
+    it("throws for a soft-deleted session", async () => {
+      const db = new GymDatabase(uniqueDbName());
+      const sessions = createSessionRepository(db);
+      const derived = createDerivedStateRepository(db);
+      const { session } = await setupSessionExercise(db, BENCH, 0);
+      await sessions.softDelete(session.id);
+      await expect(derived.getHistoryContextForSession(session.id)).rejects.toThrow();
+      db.close();
+    });
+  });
 });

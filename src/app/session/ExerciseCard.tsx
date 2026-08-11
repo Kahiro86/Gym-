@@ -17,6 +17,9 @@ export interface ExerciseCardProps {
   // at a time across every card.
   onSwap(): void;
   onSkip(): void;
+  // Fires after any set is logged, deleted, or restored — lets the
+  // session-level XP breakdown (Task 11) know to recompute.
+  onSetsChanged?(): void;
 }
 
 // One exercise slot within the logging screen (spec §14 tasks 7 & 10):
@@ -26,7 +29,7 @@ export interface ExerciseCardProps {
 // separate hook instances for the same sessionExerciseId wouldn't see
 // each other's writes, so a logged set would never show up in the list
 // next to the form that logged it.
-export function ExerciseCard({ sessionExerciseId, exerciseId, sessionId, onSwap, onSkip }: ExerciseCardProps) {
+export function ExerciseCard({ sessionExerciseId, exerciseId, sessionId, onSwap, onSkip, onSetsChanged }: ExerciseCardProps) {
   const { exercise, loading } = useExercise(exerciseId);
   const { sets, log, remove } = useSets(sessionExerciseId);
   if (loading || !exercise) return null;
@@ -45,8 +48,8 @@ export function ExerciseCard({ sessionExerciseId, exerciseId, sessionId, onSwap,
         </div>
       </div>
       <LastPerformanceLine exerciseId={exerciseId} beforeSessionId={sessionId} />
-      <SetList sets={sets} remove={remove} log={log} />
-      <LogSetForm sessionExerciseId={sessionExerciseId} exerciseId={exerciseId} log={log} />
+      <SetList sets={sets} remove={remove} log={log} onChange={onSetsChanged} />
+      <LogSetForm sessionExerciseId={sessionExerciseId} exerciseId={exerciseId} log={log} onLogged={onSetsChanged} />
     </Card>
   );
 }

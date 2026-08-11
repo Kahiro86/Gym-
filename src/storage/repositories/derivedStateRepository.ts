@@ -6,7 +6,7 @@ import { emptyExerciseHistory } from "../../domain/types.js";
 import { ENGINE_VERSION } from "../db.js";
 import type { GymDatabase } from "../db.js";
 import type { MuscleId } from "../../domain/muscles.js";
-import type { BodyweightHistory, ExerciseHistory } from "../../domain/types.js";
+import type { BodyweightHistory, ExerciseHistory, HistoryContext } from "../../domain/types.js";
 import type { PrSnapshot } from "./setRepository.js";
 import type { SessionExerciseRecord, SetRecord } from "../types.js";
 
@@ -36,6 +36,19 @@ export interface DerivedStateRepository {
   // built or were built under a since-bumped ENGINE_VERSION. Cheap no-op
   // otherwise (a single indexed read).
   ensureFresh(onProgress?: (progress: RebuildProgress) => void): Promise<void>;
+
+  // The exact HistoryContext computeSessionXp() needs to score `sessionId`'s
+  // own sets (Task 11's live XP breakdown) — built by replaying every
+  // session that started before it, so exerciseHistory reflects state as
+  // of just before this one began. Deliberately not sourced from
+  // prCache/muscleXpCache: those only refresh on a full rebuild and
+  // getPrSnapshot() can't distinguish "never logged" from "logged with
+  // empty stats" (a real row vs. no row at all), which HistoryContext's
+  // own contract requires (key absence = first-ever, see types.ts).
+  // Costs the same as a full rebuild in the worst case (proportional to
+  // total session count so far) but is only ever called for the one
+  // active session at a time, not per keystroke.
+  getHistoryContextForSession(sessionId: string): Promise<HistoryContext>;
 }
 
 const CHUNK_SIZE = 50;
@@ -61,7 +74,16 @@ function sleep(ms: number): Promise<void> {
 // getNearest-per-set cost to avoid in the first place — the schema
 // already avoids it by construction, which is stronger than making each
 // lookup O(log n).
-async function replaySessions(db: GymDatabase, onProgress?: (progress: RebuildProgress) => void) {
+interface ReplayOptions {
+  onProgress?: (progress: RebuildProgress) => void;
+  // Stops just before this session's own sets are folded in, capturing
+  // the HistoryContext at exactly that point instead of continuing to
+  // the end. Sessions at or after it are never touched.
+  stopBeforeSessionId?: string;
+}
+
+async function replaySessions(db: GymDatabase, options: ReplayOptions = {}) {
+  const { onProgress, stopBeforeSessionId } = options;
   const sessions = (await db.sessions.toArray()).filter((s) => s.deletedAt === null).sort((a, b) => a.startedAt - b.startedAt);
 
   // Pre-fetch and group once — many small per-session queries would
@@ -87,9 +109,25 @@ async function replaySessions(db: GymDatabase, onProgress?: (progress: RebuildPr
   const trainedDays = new Set<number>();
   const trainedWeeks = new Set<number>();
   const muscleXp = emptyMuscleXp();
+  let historyContextForStoppedSession: HistoryContext | undefined;
 
   for (let i = 0; i < sessions.length; i++) {
     const session = sessions[i]!;
+
+    if (session.id === stopBeforeSessionId) {
+      const thisDay = localDayIndex(session.startedAt, session.tzOffsetMinutes);
+      const thisWeek = localWeekIndex(session.startedAt, session.tzOffsetMinutes);
+      let streakWeeks = 0;
+      for (let w = thisWeek - 1; trainedWeeks.has(w); w--) streakWeeks++;
+      historyContextForStoppedSession = {
+        exerciseHistory,
+        bodyweightHistory,
+        isFirstSessionOfDay: !trainedDays.has(thisDay),
+        streakWeeks,
+      };
+      break;
+    }
+
     const sessionExerciseRows = sessionExercisesBySessionId.get(session.id) ?? [];
     const setRows = sessionExerciseRows
       .flatMap((se) => setsBySessionExerciseId.get(se.id) ?? [])
@@ -122,7 +160,7 @@ async function replaySessions(db: GymDatabase, onProgress?: (progress: RebuildPr
     }
   }
 
-  return { exerciseHistory, muscleXp };
+  return { exerciseHistory, muscleXp, historyContextForStoppedSession };
 }
 
 export function createDerivedStateRepository(db: GymDatabase): DerivedStateRepository {
@@ -146,7 +184,7 @@ export function createDerivedStateRepository(db: GymDatabase): DerivedStateRepos
     },
 
     async rebuildDerivedState(onProgress) {
-      const { exerciseHistory, muscleXp } = await replaySessions(db, onProgress);
+      const { exerciseHistory, muscleXp } = await replaySessions(db, { onProgress });
 
       await db.transaction("rw", db.prCache, db.muscleXpCache, async () => {
         await db.prCache.clear();
@@ -172,6 +210,27 @@ export function createDerivedStateRepository(db: GymDatabase): DerivedStateRepos
       const sample = await db.muscleXpCache.limit(1).toArray();
       const stale = sample.length === 0 || sample[0]!.engineVersion !== ENGINE_VERSION;
       if (stale) await this.rebuildDerivedState(onProgress);
+    },
+
+    async getHistoryContextForSession(sessionId) {
+      const session = await db.sessions.get(sessionId);
+      if (!session || session.deletedAt !== null) {
+        throw new Error(`Cannot build a history context for session ${sessionId} — it does not exist or has been deleted.`);
+      }
+      const { historyContextForStoppedSession } = await replaySessions(db, { stopBeforeSessionId: sessionId });
+      // The existence check above guarantees replaySessions finds this
+      // session in its own list and hits the stop branch (even a
+      // chronologically-first session does — trainedDays/trainedWeeks are
+      // just still empty then) — this fallback only exists to satisfy the
+      // return type, it's unreachable in practice.
+      return (
+        historyContextForStoppedSession ?? {
+          exerciseHistory: {},
+          bodyweightHistory: undefined,
+          isFirstSessionOfDay: true,
+          streakWeeks: 0,
+        }
+      );
     },
   };
 }

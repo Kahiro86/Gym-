@@ -12,6 +12,10 @@ export interface SetListProps {
   // LogSetForm's `log` prop for why.
   remove(id: string): Promise<void>;
   log(input: NewSet): Promise<SetRecord>;
+  // Fires after a delete or an undo-restore — the session's live XP
+  // total (Task 11) has its own separate hook instance that has no way
+  // to know this list changed otherwise.
+  onChange?(): void;
 }
 
 // The already-logged sets for one sessionExercise (spec §14 task 7).
@@ -19,19 +23,20 @@ export interface SetListProps {
 // setRepository has no "restore a soft-deleted row" operation, Undo
 // re-logs an equivalent new set rather than literally reviving the old
 // one; from the user's perspective the effect is identical.
-export function SetList({ sets, remove, log }: SetListProps) {
+export function SetList({ sets, remove, log, onChange }: SetListProps) {
   const { showToast } = useToast();
 
   if (sets.length === 0) return null;
 
   async function handleDelete(set: SetRecord) {
     await remove(set.id);
+    onChange?.();
     showToast({
       message: "Set deleted",
       action: {
         label: "Undo",
-        onAction: () => {
-          log({
+        onAction: async () => {
+          await log({
             sessionExerciseId: set.sessionExerciseId,
             weightKg: set.weightKg,
             reps: set.reps,
@@ -44,6 +49,7 @@ export function SetList({ sets, remove, log }: SetListProps) {
             bodyweightKgAtTime: set.bodyweightKgAtTime,
             loggedAt: set.loggedAt,
           });
+          onChange?.();
         },
       },
     });

@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useSession } from "../hooks/useSession.js";
 import { useSessionExercises } from "../hooks/useSessionExercises.js";
+import { useSessionXp } from "../hooks/useSessionXp.js";
 import { useWakeLock } from "../hooks/useWakeLock.js";
 import { useActiveSessionStore } from "../store/activeSessionStore.js";
 import { ExerciseCard } from "../session/ExerciseCard.js";
 import { ExerciseSearchSheet } from "../session/ExerciseSearchSheet.js";
 import { RestTimer } from "../session/RestTimer.js";
+import { SessionXpSummary } from "../session/SessionXpSummary.js";
 import { Button } from "../ui/Button.js";
 import { EmptyState } from "../ui/EmptyState.js";
 import { useToast } from "../ui/ToastContext.js";
@@ -48,6 +50,7 @@ type SheetState = { kind: "add" } | { kind: "swap"; sessionExercise: SessionExer
 function SessionContent({ sessionId, finish }: SessionContentProps) {
   const navigate = useNavigate();
   const sessionExercises = useSessionExercises(sessionId);
+  const sessionXp = useSessionXp(sessionId);
   const stopRest = useActiveSessionStore((s) => s.stopRest);
   const { showToast } = useToast();
   const [sheet, setSheet] = useState<SheetState>(null);
@@ -73,6 +76,7 @@ function SessionContent({ sessionId, finish }: SessionContentProps) {
   async function handleSkip(se: SessionExerciseRecord) {
     try {
       await sessionExercises.remove(se.id);
+      sessionXp.refresh();
       showToast({
         message: "Exercise removed",
         action: {
@@ -80,14 +84,15 @@ function SessionContent({ sessionId, finish }: SessionContentProps) {
           // sessionExerciseRepository has no "restore" operation — Undo
           // re-adds an equivalent slot rather than reviving the old row,
           // same simplification as SetList's undo.
-          onAction: () => {
-            sessionExercises.add({
+          onAction: async () => {
+            await sessionExercises.add({
               sessionId,
               exerciseId: se.exerciseId,
               supersetGroup: se.supersetGroup,
               note: se.note,
               plannedFromRoutineExerciseId: se.plannedFromRoutineExerciseId,
             });
+            sessionXp.refresh();
           },
         },
       });
@@ -105,6 +110,7 @@ function SessionContent({ sessionId, finish }: SessionContentProps) {
       } else {
         await sessionExercises.add({ sessionId, exerciseId });
       }
+      sessionXp.refresh();
     } catch (err) {
       console.error("Failed to update session exercises", err);
     }
@@ -115,6 +121,8 @@ function SessionContent({ sessionId, finish }: SessionContentProps) {
       <h1>Session in progress</h1>
 
       <RestTimer />
+
+      <SessionXpSummary xp={sessionXp.xp} />
 
       {!sessionExercises.loading && sessionExercises.sessionExercises.length === 0 && (
         <EmptyState title="No exercises yet" description="Add your first exercise below to start logging sets." />
@@ -128,6 +136,7 @@ function SessionContent({ sessionId, finish }: SessionContentProps) {
           sessionId={sessionId}
           onSwap={() => setSheet({ kind: "swap", sessionExercise: se })}
           onSkip={() => handleSkip(se)}
+          onSetsChanged={sessionXp.refresh}
         />
       ))}
 
