@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { GymDatabase } from "../../../src/storage/db.js";
 import { createSessionRepository } from "../../../src/storage/repositories/sessionRepository.js";
 import { createSessionExerciseRepository } from "../../../src/storage/repositories/sessionExerciseRepository.js";
 import { createBodyweightRepository } from "../../../src/storage/repositories/bodyweightRepository.js";
+import { createDeviceSettingsRepository } from "../../../src/storage/repositories/deviceSettingsRepository.js";
 import { useSets } from "../../../src/app/hooks/useSets.js";
+import { useActiveSessionStore } from "../../../src/app/store/activeSessionStore.js";
 import { LogSetForm } from "../../../src/app/session/LogSetForm.js";
 import { uniqueDbName, withDatabase } from "../testDb.js";
 import type { LogSetFormProps } from "../../../src/app/session/LogSetForm.js";
@@ -26,6 +28,10 @@ function Harness(props: Omit<LogSetFormProps, "log">) {
 }
 
 describe("LogSetForm", () => {
+  afterEach(() => {
+    useActiveSessionStore.setState({ restStartedAt: null, restDurationSec: 0 });
+  });
+
   it("shows Weight and Reps steppers for a weight+reps exercise and logs a set with the stamped bodyweight", async () => {
     const db = new GymDatabase(uniqueDbName());
     await createBodyweightRepository(db).log({ bodyweightKg: 82, recordedAt: Date.now() - 1000 });
@@ -100,6 +106,43 @@ describe("LogSetForm", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Log set" })).toBeEnabled()); // saving settled
     const [set] = await db.sets.where("sessionExerciseId").equals(se.id).toArray();
     expect(set?.weightKg).toBe(102.5);
+    db.close();
+  });
+
+  it("starts the rest timer for the exercise's defaultRestSeconds after a working set, when auto-start is on (the device default)", async () => {
+    const db = new GymDatabase(uniqueDbName());
+    const se = await seedSessionExercise(db, "barbell-bench-press");
+    render(<Harness sessionExerciseId={se.id} exerciseId="barbell-bench-press" />, { wrapper: withDatabase(db) });
+
+    await userEvent.click(await screen.findByRole("button", { name: "Log set" }));
+    await waitFor(() => expect(useActiveSessionStore.getState().restStartedAt).not.toBeNull());
+    expect(useActiveSessionStore.getState().restDurationSec).toBe(180); // barbell-bench-press's defaultRestSeconds
+    db.close();
+  });
+
+  it("does not start the rest timer for a warmup set", async () => {
+    const db = new GymDatabase(uniqueDbName());
+    const se = await seedSessionExercise(db, "barbell-bench-press");
+    render(<Harness sessionExerciseId={se.id} exerciseId="barbell-bench-press" />, { wrapper: withDatabase(db) });
+
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Warmup set" }));
+    await userEvent.click(screen.getByRole("button", { name: "Log set" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Log set" })).toBeEnabled());
+
+    expect(useActiveSessionStore.getState().restStartedAt).toBeNull();
+    db.close();
+  });
+
+  it("does not start the rest timer when the device has auto-start disabled", async () => {
+    const db = new GymDatabase(uniqueDbName());
+    await createDeviceSettingsRepository(db).update({ restTimerAutoStart: false });
+    const se = await seedSessionExercise(db, "barbell-bench-press");
+    render(<Harness sessionExerciseId={se.id} exerciseId="barbell-bench-press" />, { wrapper: withDatabase(db) });
+
+    await userEvent.click(await screen.findByRole("button", { name: "Log set" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Log set" })).toBeEnabled());
+
+    expect(useActiveSessionStore.getState().restStartedAt).toBeNull();
     db.close();
   });
 });

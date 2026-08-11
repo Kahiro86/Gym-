@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useExercise } from "../hooks/useExercise.js";
 import { useCurrentBodyweight } from "../hooks/useCurrentBodyweight.js";
+import { useDeviceSettings } from "../hooks/useDeviceSettings.js";
+import { useActiveSessionStore } from "../store/activeSessionStore.js";
 import { Stepper } from "../ui/Stepper.js";
 import { Button } from "../ui/Button.js";
 import styles from "./LogSetForm.module.css";
@@ -54,6 +56,8 @@ const DEFAULT_DISTANCE_M = 100;
 export function LogSetForm({ sessionExerciseId, exerciseId, defaultReps, defaultWeightKg, log, onLogged }: LogSetFormProps) {
   const { exercise, loading: exerciseLoading } = useExercise(exerciseId);
   const { bodyweightKg } = useCurrentBodyweight();
+  const { deviceSettings } = useDeviceSettings();
+  const startRest = useActiveSessionStore((s) => s.startRest);
 
   const [weightKg, setWeightKg] = useState(defaultWeightKg ?? DEFAULT_WEIGHT_KG);
   const [reps, setReps] = useState(defaultReps ?? DEFAULT_REPS);
@@ -65,6 +69,7 @@ export function LogSetForm({ sessionExerciseId, exerciseId, defaultReps, default
   if (exerciseLoading || !exercise) return null;
 
   const mode = inputModeFor(exercise.loadType);
+  const resolvedExercise = exercise;
 
   async function handleLog() {
     setSaving(true);
@@ -79,6 +84,11 @@ export function LogSetForm({ sessionExerciseId, exerciseId, defaultReps, default
         bodyweightKgAtTime: bodyweightKg,
         loggedAt: Date.now(),
       });
+      // Rest follows a real working set, never a warmup (spec §14 task 9),
+      // and only when the device has auto-start enabled (§8 default: on).
+      if (!isWarmup && deviceSettings?.restTimerAutoStart) {
+        startRest(resolvedExercise.defaultRestSeconds);
+      }
       setIsWarmup(false);
       onLogged?.();
     } catch (err) {

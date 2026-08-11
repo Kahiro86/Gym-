@@ -1,9 +1,12 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useSession } from "../hooks/useSession.js";
 import { useSessionExercises } from "../hooks/useSessionExercises.js";
+import { useWakeLock } from "../hooks/useWakeLock.js";
+import { useActiveSessionStore } from "../store/activeSessionStore.js";
 import { ExerciseCard } from "../session/ExerciseCard.js";
 import { AddExerciseField } from "../session/AddExerciseField.js";
+import { RestTimer } from "../session/RestTimer.js";
 import { Button } from "../ui/Button.js";
 import { EmptyState } from "../ui/EmptyState.js";
 import styles from "./ActiveSessionScreen.module.css";
@@ -39,6 +42,14 @@ interface SessionContentProps {
 function SessionContent({ sessionId, finish }: SessionContentProps) {
   const navigate = useNavigate();
   const sessionExercises = useSessionExercises(sessionId);
+  const stopRest = useActiveSessionStore((s) => s.stopRest);
+  // §2: the screen must not sleep for the whole duration of a workout,
+  // not just while the rest timer happens to be running.
+  useWakeLock(true);
+  // The rest timer is a single global store, not scoped per session — a
+  // stray countdown must not carry over into whatever's rendered next
+  // (finishing this session, or a future one).
+  useEffect(() => stopRest, [stopRest]);
 
   async function handleFinish() {
     try {
@@ -62,6 +73,8 @@ function SessionContent({ sessionId, finish }: SessionContentProps) {
   return (
     <div className={styles.screen}>
       <h1>Session in progress</h1>
+
+      <RestTimer />
 
       {!sessionExercises.loading && sessionExercises.sessionExercises.length === 0 && (
         <EmptyState title="No exercises yet" description="Add your first exercise below to start logging sets." />

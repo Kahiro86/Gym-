@@ -1,0 +1,23 @@
+.timer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--tap-target-min);
+  padding: 8px 16px;
+  border-radius: 12px;
+  background: var(--plate-blue);
+  color: var(--chalk);
+}
+
+.time {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.actions {
+  display: flex;
+  gap: var(--tap-target-gap);
+}
