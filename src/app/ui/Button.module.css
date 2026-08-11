@@ -1,0 +1,64 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--tap-target-min);
+  padding: 0 20px;
+  border-radius: 12px;
+  border: none;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 15px;
+  cursor: pointer;
+  transition:
+    transform 0.05s ease,
+    opacity 0.15s ease;
+}
+
+.button:active {
+  transform: scale(0.97);
+}
+
+.button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.primary {
+  background: var(--plate-red);
+  color: var(--chalk);
+}
+
+.secondary {
+  background: var(--surface-raised);
+  color: var(--chalk);
+  border: 1px solid rgba(242, 239, 233, 0.12);
+}
+
+.danger {
+  background: transparent;
+  color: var(--plate-red);
+  border: 1px solid var(--plate-red);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--chalk-dim);
+}
+
+.compact {
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    transition: none;
+  }
+  .button:active {
+    transform: none;
+  }
+}

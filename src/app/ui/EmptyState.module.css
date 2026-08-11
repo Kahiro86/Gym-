@@ -1,0 +1,29 @@
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 48px 24px;
+  color: var(--chalk-dim);
+}
+
+.icon {
+  font-size: 40px;
+  margin-bottom: 8px;
+}
+
+.title {
+  color: var(--chalk);
+  font-size: 20px;
+}
+
+.description {
+  margin: 0;
+  font-size: 14px;
+  max-width: 32ch;
+}
+
+.action {
+  margin-top: 12px;
+}

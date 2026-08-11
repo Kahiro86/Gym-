@@ -9,6 +9,7 @@ import "./tokens.css";
 import "./global.css";
 import { App } from "./App";
 import { DatabaseProvider } from "./db/DatabaseProvider";
+import { ToastProvider } from "./ui/ToastProvider";
 
 const container = document.getElementById("root");
 if (!container) {
@@ -19,7 +20,9 @@ createRoot(container).render(
   <StrictMode>
     <DatabaseProvider>
       <BrowserRouter>
-        <App />
+        <ToastProvider>
+          <App />
+        </ToastProvider>
       </BrowserRouter>
     </DatabaseProvider>
   </StrictMode>

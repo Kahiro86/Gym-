@@ -1,0 +1,31 @@
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--tap-target-gap);
+}
+
+.button {
+  min-width: var(--tap-target-min);
+  min-height: var(--tap-target-min);
+  border-radius: 12px;
+  border: none;
+  background: var(--surface-raised);
+  color: var(--chalk);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.value {
+  min-width: 64px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+}
