@@ -8,6 +8,7 @@ import "@fontsource/ibm-plex-mono/400.css";
 import "./tokens.css";
 import "./global.css";
 import { App } from "./App";
+import { DatabaseProvider } from "./db/DatabaseProvider";
 
 const container = document.getElementById("root");
 if (!container) {
@@ -16,8 +17,10 @@ if (!container) {
 
 createRoot(container).render(
   <StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <DatabaseProvider>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </DatabaseProvider>
   </StrictMode>
 );
