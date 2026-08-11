@@ -3,49 +3,77 @@ import { newId, now } from "./ids.js";
 import type {
   ExerciseRecord,
   SessionRecord,
+  SessionExerciseRecord,
   SetRecord,
   BodyweightLogRecord,
+  ProfileRecord,
   SettingsRecord,
+  DeviceSettingsRecord,
+  RoutineRecord,
+  RoutineExerciseRecord,
   PrCacheRecord,
   MuscleXpCacheRecord,
   SyncQueueRecord,
+  SyncLogRecord,
 } from "./types.js";
 
 export const SCHEMA_VERSION = 1;
 // Bumped whenever Layer 1's XP constants/formulas change (XP_CONSTANT,
 // level curve, PR bonuses, ...). A mismatch on startup wipes and rebuilds
-// the derived caches (§6) — never the raw sets/sessions, which are the
+// the derived caches (§7) — never the raw sets/sessions, which are the
 // only source of truth (§2.1).
 export const ENGINE_VERSION = 1;
 
 const DEFAULT_DB_NAME = "gymxp";
 const SETTINGS_ID = "singleton" as const;
+const PROFILE_ID = "singleton" as const;
+const DEVICE_SETTINGS_ID = "singleton" as const;
 
-// db.ts — Dexie schema (spec §4.1/§4.4). Forward-only versioned
-// migrations: never edit a shipped version() block (§8) — add a new one.
+// db.ts — Dexie schema v2 (spec §5). Forward-only versioned migrations:
+// never edit a shipped version() block (§10) — add a new one.
 export class GymDatabase extends Dexie {
   exercises!: Table<ExerciseRecord, string>;
+  routines!: Table<RoutineRecord, string>;
+  routineExercises!: Table<RoutineExerciseRecord, string>;
   sessions!: Table<SessionRecord, string>;
+  sessionExercises!: Table<SessionExerciseRecord, string>;
   sets!: Table<SetRecord, string>;
   bodyweightLog!: Table<BodyweightLogRecord, string>;
+  profile!: Table<ProfileRecord, string>;
   settings!: Table<SettingsRecord, string>;
+  deviceSettings!: Table<DeviceSettingsRecord, string>;
   prCache!: Table<PrCacheRecord, string>;
   muscleXpCache!: Table<MuscleXpCacheRecord, string>;
   syncQueue!: Table<SyncQueueRecord, string>;
+  syncLog!: Table<SyncLogRecord, string>;
 
   private cachedDeviceId: string | undefined;
 
-  constructor(name: string = DEFAULT_DB_NAME) {
-    super(name);
+  constructor(name: string = DEFAULT_DB_NAME, options?: ConstructorParameters<typeof Dexie>[1]) {
+    super(name, options);
     this.version(SCHEMA_VERSION).stores({
-      exercises: "id, name, *aliases, loadType, updatedAt",
-      sessions: "id, startedAt, [deletedAt+startedAt], updatedAt",
-      sets: "id, sessionId, exerciseId, loggedAt, [exerciseId+loggedAt], [sessionId+orderIndex], updatedAt",
+      // Spec §5.6 lists this index as "isDeleted" — our schema (and every
+      // other table) uses the nullable `deletedAt` tombstone instead, so
+      // that's what's indexed here; there is no separate boolean field.
+      exercises: "id, name, *aliases, loadType, deletedAt, updatedAt",
+      routines: "id, name, updatedAt",
+      sessions: "id, state, startedAt, [state+startedAt], [deletedAt+startedAt], updatedAt",
+      sessionExercises: "id, sessionId, exerciseId, [sessionId+orderIndex]",
+      // [exerciseId+deletedAt+loggedAt]: soft-delete filtering lives INSIDE
+      // the compound index (§5.6), not as a post-fetch predicate — a range
+      // query pinned to deletedAt === null never touches tombstoned rows
+      // at all. This is the index "what did I lift last time" resolves
+      // through; it must stay well under the UI's per-keystroke budget.
+      sets: "id, sessionExerciseId, loggedAt, [sessionExerciseId+orderIndex], [exerciseId+deletedAt+loggedAt], updatedAt",
       bodyweightLog: "id, recordedAt, updatedAt",
+      profile: "id",
       settings: "id",
+      deviceSettings: "id",
+      routineExercises: "id, routineId, [routineId+orderIndex]",
       prCache: "exerciseId",
       muscleXpCache: "muscleId",
       syncQueue: "id, createdAt, entityType",
+      syncLog: "id, timestamp",
     });
   }
 
@@ -69,19 +97,116 @@ export class GymDatabase extends Dexie {
         id: SETTINGS_ID,
         units: "kg",
         weeklyTargetSessions: null,
-        theme: "system",
+        defaultRestSeconds: 120,
         installDeviceId,
         updatedAt: now(),
         deletedAt: null,
         deviceId: installDeviceId,
         syncedAt: null,
+        serverUpdatedAt: null,
       };
       await this.settings.add(fresh);
       return fresh;
     });
   }
+
+  async getOrCreateDeviceSettings(): Promise<DeviceSettingsRecord> {
+    return this.transaction("rw", this.deviceSettings, async () => {
+      const existing = await this.deviceSettings.get(DEVICE_SETTINGS_ID);
+      if (existing) return existing;
+
+      const fresh: DeviceSettingsRecord = {
+        id: DEVICE_SETTINGS_ID,
+        theme: "system",
+        reduceMotion: false,
+        soundEnabled: true,
+        restTimerAutoStart: true,
+        restTimerSoundEnabled: true,
+        persistenceGranted: false,
+        updatedAt: now(),
+      };
+      await this.deviceSettings.add(fresh);
+      return fresh;
+    });
+  }
+
+  async getOrCreateProfile(): Promise<ProfileRecord> {
+    return this.transaction("rw", this.profile, async () => {
+      const existing = await this.profile.get(PROFILE_ID);
+      if (existing) return existing;
+
+      const deviceId = await this.getDeviceId();
+      const fresh: ProfileRecord = {
+        id: PROFILE_ID,
+        heightCm: null,
+        birthDate: null,
+        sex: null,
+        updatedAt: now(),
+        deletedAt: null,
+        deviceId,
+        syncedAt: null,
+        serverUpdatedAt: null,
+      };
+      await this.profile.add(fresh);
+      return fresh;
+    });
+  }
 }
 
+// [v2] §3.1: Firefox strict mode, private browsing, and some embedded
+// webviews block IndexedDB outright. Probe with a real (disposable) open
+// rather than trusting feature detection alone — some environments expose
+// `indexedDB` but reject every operation.
+export async function isIndexedDbAvailable(): Promise<boolean> {
+  if (typeof indexedDB === "undefined") return false;
+
+  return new Promise<boolean>((resolve) => {
+    try {
+      const probeName = "__gymxp_indexeddb_probe__";
+      const request = indexedDB.open(probeName);
+      request.onsuccess = () => {
+        request.result.close();
+        try {
+          indexedDB.deleteDatabase(probeName);
+        } catch {
+          // Cleanup best-effort — availability is already proven either way.
+        }
+        resolve(true);
+      };
+      request.onerror = () => resolve(false);
+      request.onblocked = () => resolve(false);
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
+export interface OpenDatabaseResult {
+  db: GymDatabase;
+  // True when the real browser IndexedDB was unavailable and `db` is
+  // backed by an in-memory engine instead — nothing written to it survives
+  // a reload. Layer 3 must show a persistent banner and enable export when
+  // this is true (§3.1); it must never fail silently.
+  degraded: boolean;
+}
+
+// The safe way to open a database from Layer 3: probes IndexedDB and, on
+// failure, falls back to an in-memory-only backend running the identical
+// Dexie schema and repository code — no parallel storage implementation to
+// maintain, no behavioral drift between normal and degraded mode.
+export async function openDatabaseSafely(name?: string): Promise<OpenDatabaseResult> {
+  const available = await isIndexedDbAvailable();
+  if (available) {
+    return { db: new GymDatabase(name), degraded: false };
+  }
+
+  const fakeIndexedDb = await import("fake-indexeddb");
+  const db = new GymDatabase(name, { indexedDB: fakeIndexedDb.indexedDB, IDBKeyRange: fakeIndexedDb.IDBKeyRange });
+  return { db, degraded: true };
+}
+
+// Direct construction, bypassing the availability probe — for tests and
+// any caller that already knows which backend it wants.
 export function openDatabase(name?: string): GymDatabase {
   return new GymDatabase(name);
 }

@@ -2,7 +2,7 @@
   "name": "gymxp",
   "private": true,
   "version": "0.1.0",
-  "description": "GymXP: Layer 1 domain core (XP engine, catalog, progression), Layer 2 heatmap + storage. No UI, no network.",
+  "description": "GymXP: Layer 1 domain core (XP engine, catalog, progression, heatmap), Layer 2 storage (Dexie/IndexedDB, sync-ready, sessions/routines/exercises). No UI, no network.",
   "type": "module",
   "scripts": {
     "test": "vitest run",
@@ -11,10 +11,10 @@
   },
   "dependencies": {
     "dexie": "^4.4.4",
+    "fake-indexeddb": "^6.2.5",
     "uuidv7": "^1.2.1"
   },
   "devDependencies": {
-    "fake-indexeddb": "^6.2.5",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
   }
