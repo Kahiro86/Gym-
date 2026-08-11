@@ -132,6 +132,7 @@ export class GymDatabase extends Dexie {
         restTimerSoundEnabled: true,
         persistenceRequested: false,
         persistenceGranted: false,
+        onboardingCompleted: false,
         updatedAt: now(),
       };
       await this.deviceSettings.add(fresh);

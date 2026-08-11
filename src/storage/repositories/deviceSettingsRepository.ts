@@ -10,6 +10,7 @@ export interface DeviceSettingsPatch {
   restTimerSoundEnabled?: boolean;
   persistenceRequested?: boolean;
   persistenceGranted?: boolean;
+  onboardingCompleted?: boolean;
 }
 
 export interface DeviceSettingsRepository {

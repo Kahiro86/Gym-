@@ -16,6 +16,7 @@ describe("DeviceSettingsRepository", () => {
     expect(settings.soundEnabled).toBe(true);
     expect(settings.restTimerAutoStart).toBe(true);
     expect(settings.persistenceGranted).toBe(false);
+    expect(settings.onboardingCompleted).toBe(false);
     db.close();
   });
 

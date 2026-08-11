@@ -144,6 +144,10 @@ export interface DeviceSettingsRecord {
   // which matters for not re-prompting on every write.
   persistenceRequested: boolean;
   persistenceGranted: boolean; // surfaced in the debug menu
+  // [L3] Set once the onboarding flow (Layer 3 task 4) finishes or is
+  // skipped — device-local like everything else here, since a fresh
+  // browser profile on a synced account should still see onboarding once.
+  onboardingCompleted: boolean;
   updatedAt: number;
 }
 
