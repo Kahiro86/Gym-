@@ -256,4 +256,49 @@ describe("export/import (v2)", () => {
       target.close();
     });
   });
+
+  // Spec §14 DoD: "Export -> wipe -> import round-trips a 12-week history
+  // losslessly." Same database throughout — this is the backup/restore
+  // story, not a cross-device migration.
+  it("export -> wipe -> import round-trips a 12-week history with no loss", async () => {
+    const db = new GymDatabase(uniqueDbName());
+    await seedCatalog(db);
+    const { seedDevHistory } = await import("../../src/storage/devSeed.js");
+    const { createDerivedStateRepository } = await import("../../src/storage/repositories/derivedStateRepository.js");
+    const seedResult = await seedDevHistory(db, { startedAt: 0, weeks: 12, seed: 42 });
+
+    const derived = createDerivedStateRepository(db);
+    await derived.rebuildDerivedState();
+
+    const bundle = await exportData(db);
+    const preWipeXp = await derived.getAllMuscleXp();
+    const preWipeBenchPr = await derived.getPrSnapshot(BENCH);
+
+    await db.exercises.clear();
+    await db.routines.clear();
+    await db.routineExercises.clear();
+    await db.sessions.clear();
+    await db.sessionExercises.clear();
+    await db.sets.clear();
+    await db.bodyweightLog.clear();
+    await db.profile.clear();
+    await db.settings.clear();
+    await db.deviceSettings.clear();
+    await db.prCache.clear();
+    await db.muscleXpCache.clear();
+    expect(await db.sessions.count()).toBe(0);
+
+    const result = await importData(db, bundle);
+    expect(result.sessions).toBe(seedResult.sessionCount);
+    expect(result.sets).toBe(seedResult.setCount);
+    expect(await db.exercises.count()).toBe(bundle.exercises.length);
+
+    // importData doesn't rebuild caches itself (task 5 predates task 14 in
+    // the build sequence) — rebuild explicitly, then confirm no loss
+    // relative to the pre-wipe snapshot.
+    await derived.rebuildDerivedState();
+    expect(await derived.getAllMuscleXp()).toEqual(preWipeXp);
+    expect(await derived.getPrSnapshot(BENCH)).toEqual(preWipeBenchPr);
+    db.close();
+  });
 });
