@@ -51,19 +51,65 @@ describe("ActiveSessionScreen", () => {
     db.close();
   });
 
-  it("adds an exercise via search, logs a set, and shows it in the exercise's set list", async () => {
+  it("adds an exercise via the search sheet, logs a set, and shows it in the exercise's set list", async () => {
     const db = new GymDatabase(uniqueDbName());
     await createSessionRepository(db).create({ startedAt: Date.now() });
     renderAt(db, "/session");
 
-    await userEvent.type(await screen.findByRole("textbox", { name: "Search exercises" }), "bench press");
+    await userEvent.click(await screen.findByRole("button", { name: "Add exercise" }));
+    expect(await screen.findByRole("dialog", { name: "Add exercise" })).toBeInTheDocument();
+    await userEvent.type(screen.getByRole("textbox", { name: "Search exercises" }), "bench press");
     await userEvent.click(await screen.findByRole("button", { name: "Barbell Bench Press" }));
 
     expect(await screen.findByRole("heading", { name: "Barbell Bench Press" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(await screen.findByText("First time logging this exercise")).toBeInTheDocument();
 
     await userEvent.click(await screen.findByRole("button", { name: "Log set" }));
     await waitFor(() => expect(screen.getByText("20 kg × 8")).toBeInTheDocument()); // defaults
+    db.close();
+  });
+
+  it("swaps an exercise for a different one via the search sheet, keeping the same slot's logged sets", async () => {
+    const db = new GymDatabase(uniqueDbName());
+    await createSessionRepository(db).create({ startedAt: Date.now() });
+    renderAt(db, "/session");
+
+    await userEvent.click(await screen.findByRole("button", { name: "Add exercise" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Search exercises" }), "bench press");
+    await userEvent.click(await screen.findByRole("button", { name: "Barbell Bench Press" }));
+    await screen.findByRole("heading", { name: "Barbell Bench Press" });
+    await userEvent.click(await screen.findByRole("button", { name: "Log set" }));
+    await waitFor(() => expect(screen.getByText("20 kg × 8")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: "Swap" }));
+    expect(await screen.findByRole("dialog", { name: "Swap exercise" })).toBeInTheDocument();
+    await userEvent.type(screen.getByRole("textbox", { name: "Search exercises" }), "back squat");
+    await userEvent.click(await screen.findByRole("button", { name: "Back Squat" }));
+
+    expect(await screen.findByRole("heading", { name: "Back Squat" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Barbell Bench Press" })).not.toBeInTheDocument();
+    // The set logged before the swap is still there, under the same slot.
+    expect(screen.getByText("20 kg × 8")).toBeInTheDocument();
+    db.close();
+  });
+
+  it("skips an exercise, removing it with an undo toast that restores it", async () => {
+    const db = new GymDatabase(uniqueDbName());
+    await createSessionRepository(db).create({ startedAt: Date.now() });
+    renderAt(db, "/session");
+
+    await userEvent.click(await screen.findByRole("button", { name: "Add exercise" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Search exercises" }), "bench press");
+    await userEvent.click(await screen.findByRole("button", { name: "Barbell Bench Press" }));
+    await screen.findByRole("heading", { name: "Barbell Bench Press" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Skip" }));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Barbell Bench Press" })).not.toBeInTheDocument());
+    expect(screen.getByRole("status")).toHaveTextContent("Exercise removed");
+
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(await screen.findByRole("heading", { name: "Barbell Bench Press" })).toBeInTheDocument();
     db.close();
   });
 

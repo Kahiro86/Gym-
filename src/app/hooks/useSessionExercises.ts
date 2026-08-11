@@ -9,6 +9,10 @@ export interface UseSessionExercisesResult {
   error: Error | null;
   add(input: NewSessionExercise): Promise<SessionExerciseRecord>;
   remove(id: string): Promise<void>;
+  // Swaps which exercise a slot performs (spec §14 task 10) — stamps
+  // substitutedFromId on the record (§5.2); the sets already logged
+  // against this slot stay exactly as they are.
+  substitute(id: string, newExerciseId: string): Promise<SessionExerciseRecord>;
   refresh(): Promise<void>;
 }
 
@@ -59,5 +63,14 @@ export function useSessionExercises(sessionId: string | null): UseSessionExercis
     [repo, refresh]
   );
 
-  return { sessionExercises, loading, error, add, remove, refresh };
+  const substitute = useCallback<UseSessionExercisesResult["substitute"]>(
+    async (id, newExerciseId) => {
+      const record = await repo.substitute(id, newExerciseId);
+      await refresh();
+      return record;
+    },
+    [repo, refresh]
+  );
+
+  return { sessionExercises, loading, error, add, remove, substitute, refresh };
 }

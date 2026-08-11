@@ -4,7 +4,20 @@
   gap: 12px;
 }
 
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .name {
   margin: 0;
   font-size: 20px;
+}
+
+.headerActions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
 }

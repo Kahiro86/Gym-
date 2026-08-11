@@ -63,4 +63,25 @@ describe("useSessionExercises", () => {
     expect(result.current.sessionExercises).toEqual([]);
     db.close();
   });
+
+  it("substitute() swaps which exercise a slot performs and stamps substitutedFromId", async () => {
+    const db = new GymDatabase(uniqueDbName());
+    const session = await createSessionRepository(db).create({ startedAt: Date.now() });
+    const { result } = renderHook(() => useSessionExercises(session.id), { wrapper: withDatabase(db) });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let addedId = "";
+    await act(async () => {
+      addedId = (await result.current.add({ sessionId: session.id, exerciseId: BENCH })).id;
+    });
+
+    await act(async () => {
+      await result.current.substitute(addedId, SQUAT);
+    });
+
+    expect(result.current.sessionExercises).toHaveLength(1);
+    expect(result.current.sessionExercises[0]?.exerciseId).toBe(SQUAT);
+    expect(result.current.sessionExercises[0]?.substitutedFromId).toBe(BENCH);
+    db.close();
+  });
 });
