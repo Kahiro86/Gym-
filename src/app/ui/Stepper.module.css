@@ -23,9 +23,29 @@
 
 .value {
   min-width: 64px;
+  min-height: var(--tap-target-min);
   text-align: center;
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 28px;
   font-variant-numeric: tabular-nums;
+  background: none;
+  border: none;
+  color: var(--chalk);
+  cursor: pointer;
 }
+
+.input {
+  width: 96px;
+  min-height: var(--tap-target-min);
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface);
+  border: 1px solid var(--plate-blue);
+  border-radius: 8px;
+  color: var(--chalk);
+}
+

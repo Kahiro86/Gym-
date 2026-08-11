@@ -5,6 +5,7 @@ import { useDatabase } from "../db/context.js";
 export interface UseOnboardingResult {
   loading: boolean;
   completed: boolean;
+  error: Error | null;
   complete(): Promise<void>;
 }
 
@@ -16,14 +17,27 @@ export function useOnboarding(): UseOnboardingResult {
   const repo = useMemo(() => createDeviceSettingsRepository(db), [db]);
   const [loading, setLoading] = useState(true);
   const [completed, setCompleted] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    repo.get().then((settings) => {
-      if (cancelled) return;
-      setCompleted(settings.onboardingCompleted);
-      setLoading(false);
-    });
+    repo
+      .get()
+      .then((settings) => {
+        if (cancelled) return;
+        setCompleted(settings.onboardingCompleted);
+        setError(null);
+      })
+      .catch((err) => {
+        // Swallowed once unmounted (e.g. the database closed mid-fetch) —
+        // an unhandled rejection here is a genuine bug, not just test
+        // noise, so every hook that fetches on mount catches its own.
+        if (cancelled) return;
+        setError(err instanceof Error ? err : new Error(String(err)));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -34,5 +48,5 @@ export function useOnboarding(): UseOnboardingResult {
     setCompleted(true);
   }, [repo]);
 
-  return { loading, completed, complete };
+  return { loading, completed, error, complete };
 }

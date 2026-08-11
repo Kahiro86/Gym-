@@ -21,14 +21,24 @@ export function StartSheet({ open, onClose, onStarted }: StartSheetProps) {
   const routines = useRoutines();
 
   const startFree = useCallback(async () => {
-    await session.start(Date.now());
-    onStarted();
+    try {
+      await session.start(Date.now());
+      onStarted();
+    } catch (err) {
+      // Task 18 owns real error-surfacing UI — for now, just don't leave
+      // this unhandled.
+      console.error("Failed to start a session", err);
+    }
   }, [session, onStarted]);
 
   const startFromRoutine = useCallback(
     async (routineId: string) => {
-      await session.start(Date.now(), { routineId });
-      onStarted();
+      try {
+        await session.start(Date.now(), { routineId });
+        onStarted();
+      } catch (err) {
+        console.error("Failed to start a session from routine", err);
+      }
     },
     [session, onStarted]
   );

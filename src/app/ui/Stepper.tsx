@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./Stepper.module.css";
 
 export interface StepperProps {
@@ -10,6 +10,11 @@ export interface StepperProps {
   formatValue?(value: number): string;
   label?: string;
   disabled?: boolean;
+  // Lets the displayed value be tapped and typed directly via the OS
+  // numeric keyboard (spec §2: inputMode="decimal"/"numeric" for numeric
+  // fields) — for jumping straight to e.g. 102.5kg instead of many taps.
+  editable?: boolean;
+  inputMode?: "decimal" | "numeric";
 }
 
 const HOLD_REPEAT_DELAY_MS = 400;
@@ -28,6 +33,8 @@ export function Stepper({
   formatValue,
   label,
   disabled = false,
+  editable = false,
+  inputMode = "decimal",
 }: StepperProps) {
   const holdTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const holdInterval = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -58,6 +65,23 @@ export function Stepper({
 
   const display = formatValue ? formatValue(value) : String(value);
 
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+
+  useEffect(() => {
+    if (!editing) setDraft(String(value));
+  }, [value, editing]);
+
+  function commitDraft() {
+    const parsed = Number(draft);
+    if (draft.trim() !== "" && Number.isFinite(parsed)) {
+      onChange(clamp(parsed));
+    } else {
+      setDraft(String(value));
+    }
+    setEditing(false);
+  }
+
   return (
     <div className={styles.stepper} role="group" aria-label={label}>
       <button
@@ -72,7 +96,34 @@ export function Stepper({
       >
         −
       </button>
-      <span className={styles.value}>{display}</span>
+
+      {editable && editing ? (
+        <input
+          className={styles.input}
+          type="text"
+          inputMode={inputMode}
+          value={draft}
+          autoFocus
+          aria-label={label}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commitDraft}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+            } else if (event.key === "Escape") {
+              setDraft(String(value));
+              setEditing(false);
+            }
+          }}
+        />
+      ) : editable ? (
+        <button type="button" className={styles.value} onClick={() => setEditing(true)} disabled={disabled} aria-label={label ? `Edit ${label}` : "Edit value"}>
+          {display}
+        </button>
+      ) : (
+        <span className={styles.value}>{display}</span>
+      )}
+
       <button
         type="button"
         className={styles.button}

@@ -45,6 +45,10 @@ export function OnboardingFlow({ onDone }: OnboardingFlowProps) {
         await createBodyweightRepository(db).log({ bodyweightKg: finalBodyweightKg, recordedAt: Date.now() });
       }
       await onDone();
+    } catch (err) {
+      // Task 18 owns real error-surfacing UI — for now, just don't leave
+      // this unhandled.
+      console.error("Failed to complete onboarding", err);
     } finally {
       setSaving(false);
     }

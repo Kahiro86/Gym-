@@ -58,4 +58,58 @@ describe("Stepper", () => {
     expect(screen.getByRole("button", { name: "Increase Reps" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Decrease Reps" })).toBeDisabled();
   });
+
+  describe("editable", () => {
+    it("is not editable by default — the value is a plain, non-interactive span", () => {
+      render(<Stepper value={60} onChange={() => {}} label="Weight" />);
+      expect(screen.queryByRole("button", { name: "Edit Weight" })).not.toBeInTheDocument();
+    });
+
+    it("tapping the value opens a numeric text input pre-filled with the current value", async () => {
+      render(<Stepper value={60} onChange={() => {}} editable label="Weight" />);
+      await userEvent.click(screen.getByRole("button", { name: "Edit Weight" }));
+
+      const input = screen.getByRole("textbox", { name: "Weight" });
+      expect(input).toHaveValue("60");
+      expect(input).toHaveAttribute("inputmode", "decimal");
+    });
+
+    it("commits a typed value on blur, clamped to min/max", async () => {
+      const onChange = vi.fn();
+      render(<Stepper value={60} min={0} max={100} onChange={onChange} editable label="Weight" />);
+      await userEvent.click(screen.getByRole("button", { name: "Edit Weight" }));
+
+      const input = screen.getByRole("textbox", { name: "Weight" });
+      await userEvent.clear(input);
+      await userEvent.type(input, "250");
+      await userEvent.tab(); // blur
+
+      expect(onChange).toHaveBeenCalledWith(100);
+    });
+
+    it("discards an unparseable draft and reverts to the plain display on blur", async () => {
+      const onChange = vi.fn();
+      render(<Stepper value={60} onChange={onChange} editable label="Weight" />);
+      await userEvent.click(screen.getByRole("button", { name: "Edit Weight" }));
+
+      const input = screen.getByRole("textbox", { name: "Weight" });
+      await userEvent.clear(input);
+      await userEvent.type(input, "not a number");
+      await userEvent.tab();
+
+      expect(onChange).not.toHaveBeenCalled();
+      expect(screen.getByRole("button", { name: "Edit Weight" })).toHaveTextContent("60");
+    });
+
+    it("Escape cancels editing without committing", async () => {
+      const onChange = vi.fn();
+      render(<Stepper value={60} onChange={onChange} editable label="Weight" />);
+      await userEvent.click(screen.getByRole("button", { name: "Edit Weight" }));
+      await userEvent.type(screen.getByRole("textbox", { name: "Weight" }), "999");
+      await userEvent.keyboard("{Escape}");
+
+      expect(onChange).not.toHaveBeenCalled();
+      expect(screen.queryByRole("textbox", { name: "Weight" })).not.toBeInTheDocument();
+    });
+  });
 });

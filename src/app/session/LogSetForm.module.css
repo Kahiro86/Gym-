@@ -1,0 +1,26 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+.steppers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  justify-content: center;
+}
+
+.warmupToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap-target-min);
+  color: var(--chalk-dim);
+  font-size: 14px;
+}
+
+.logButton {
+  width: 100%;
+}

@@ -15,19 +15,27 @@ export function StartScreen() {
 
   const active = session.check;
 
-  async function handleContinue() {
+  function handleContinue() {
     navigate("/session");
   }
 
   async function handleResume() {
     if (!active) return;
-    await session.resume(active.session.id);
-    navigate("/session");
+    try {
+      await session.resume(active.session.id);
+      navigate("/session");
+    } catch (err) {
+      console.error("Failed to resume session", err);
+    }
   }
 
   async function handleDiscard() {
     if (!active) return;
-    await session.discard(active.session.id);
+    try {
+      await session.discard(active.session.id);
+    } catch (err) {
+      console.error("Failed to discard session", err);
+    }
   }
 
   return (
