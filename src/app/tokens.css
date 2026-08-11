@@ -1,0 +1,32 @@
+/* Spec §3.1 — "calibrated iron" visual identity tokens. */
+:root {
+  /* Surfaces: warm graphite, not neutral gray. */
+  --surface: #1f1d1b;
+  --surface-raised: #2a2724;
+
+  /* Text: chalk. */
+  --chalk: #f2efe9;
+  --chalk-dim: #9a948b;
+
+  /* Plate-weight color semantics — reused for meaning, not decoration. */
+  --plate-red: #d4342a; /* 25kg — primary actions, PRs */
+  --plate-blue: #1e6fbf; /* 20kg — active session */
+  --plate-yellow: #e8b317; /* 15kg — XP */
+  --plate-green: #2e8b4f; /* 10kg — completion */
+
+  /* Typography. */
+  --font-display: "Barlow Condensed", sans-serif;
+  --font-body: "IBM Plex Sans", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+
+  /* Safe-area insets, with non-notched fallbacks. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  /* Reachability + tap-target constants (spec §2). */
+  --tab-bar-height: 64px;
+  --tap-target-min: 56px;
+  --tap-target-gap: 8px;
+}
