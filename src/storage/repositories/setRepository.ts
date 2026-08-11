@@ -3,6 +3,7 @@ import { enqueueSync } from "../syncQueue.js";
 import { bumpSessionActivity } from "./sessionRepository.js";
 import { validateWeightKg, validateReps, validateDurationSec, validateRpe, validateLoggedAt } from "../validation.js";
 import { toLoggedSet } from "../convert.js";
+import { ensurePersistenceRequested } from "../persistence.js";
 import { getExercise } from "../../domain/registry.js";
 import { recordSetIntoHistory } from "../../domain/prs.js";
 import { emptyExerciseHistory } from "../../domain/types.js";
@@ -95,7 +96,7 @@ export function createSetRepository(db: GymDatabase): SetRepository {
     async log(input) {
       validateSetFields(input);
       const deviceId = await db.getDeviceId();
-      return db.transaction("rw", db.sets, db.sessionExercises, db.sessions, db.syncQueue, async () => {
+      const record = await db.transaction("rw", db.sets, db.sessionExercises, db.sessions, db.syncQueue, async () => {
         const sessionExercise = await db.sessionExercises.get(input.sessionExerciseId);
         if (!sessionExercise || sessionExercise.deletedAt !== null) {
           throw new Error(`Cannot log a set — sessionExercise ${input.sessionExerciseId} does not exist or has been deleted.`);
@@ -132,6 +133,14 @@ export function createSetRepository(db: GymDatabase): SetRepository {
         await enqueueSync(db, "set", record.id, "upsert");
         return record;
       });
+
+      // §2.6: request persistence at the first meaningful write. Not part
+      // of the transaction above — navigator.storage.persist() is a
+      // separate browser API call, not a Dexie operation, and its own
+      // internal idempotency check means every log() after the first is a
+      // single cheap read that immediately no-ops.
+      await ensurePersistenceRequested(db);
+      return record;
     },
 
     async update(id, patch) {

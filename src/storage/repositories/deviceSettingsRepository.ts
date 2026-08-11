@@ -8,6 +8,7 @@ export interface DeviceSettingsPatch {
   soundEnabled?: boolean;
   restTimerAutoStart?: boolean;
   restTimerSoundEnabled?: boolean;
+  persistenceRequested?: boolean;
   persistenceGranted?: boolean;
 }
 

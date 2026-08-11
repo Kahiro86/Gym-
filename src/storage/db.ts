@@ -130,6 +130,7 @@ export class GymDatabase extends Dexie {
         soundEnabled: true,
         restTimerAutoStart: true,
         restTimerSoundEnabled: true,
+        persistenceRequested: false,
         persistenceGranted: false,
         updatedAt: now(),
       };

@@ -138,7 +138,12 @@ export interface DeviceSettingsRecord {
   soundEnabled: boolean;
   restTimerAutoStart: boolean;
   restTimerSoundEnabled: boolean;
-  persistenceGranted: boolean; // §2.6 — surfaced in the debug menu
+  // §2.6: distinct booleans because "has this device ever asked" and "was
+  // it granted" are different states — persistenceGranted alone can't
+  // tell an already-denied device apart from one that's never been asked,
+  // which matters for not re-prompting on every write.
+  persistenceRequested: boolean;
+  persistenceGranted: boolean; // surfaced in the debug menu
   updatedAt: number;
 }
 
