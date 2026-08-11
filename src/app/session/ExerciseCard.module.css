@@ -1,0 +1,10 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.name {
+  margin: 0;
+  font-size: 20px;
+}

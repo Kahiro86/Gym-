@@ -1,0 +1,24 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.input {
+  min-height: var(--tap-target-min);
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(242, 239, 233, 0.12);
+  background: var(--surface-raised);
+  color: var(--chalk);
+  font-family: var(--font-body);
+  font-size: 15px;
+}
+
+.results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}

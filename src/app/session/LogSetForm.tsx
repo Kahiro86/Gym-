@@ -1,17 +1,23 @@
 import { useState } from "react";
-import { useSets } from "../hooks/useSets.js";
 import { useExercise } from "../hooks/useExercise.js";
 import { useCurrentBodyweight } from "../hooks/useCurrentBodyweight.js";
 import { Stepper } from "../ui/Stepper.js";
 import { Button } from "../ui/Button.js";
 import styles from "./LogSetForm.module.css";
 import type { LoadType } from "../../domain/types.js";
+import type { NewSet } from "../../storage/repositories/setRepository.js";
+import type { SetRecord } from "../../storage/types.js";
 
 export interface LogSetFormProps {
   sessionExerciseId: string;
   exerciseId: string;
   defaultReps?: number;
   defaultWeightKg?: number;
+  // Passed down from the same useSets() instance SetList reads, rather
+  // than calling useSets() again here — two independent hook instances
+  // for the same sessionExerciseId don't see each other's writes, so a
+  // logged set would never show up in the list next to this form.
+  log(input: NewSet): Promise<SetRecord>;
   onLogged?(): void;
 }
 
@@ -45,10 +51,9 @@ const DEFAULT_DISTANCE_M = 100;
 // loadType so a bodyweight movement never asks for a weight it doesn't
 // take, and stamps bodyweightKgAtTime from the user's last known weigh-in
 // automatically (useCurrentBodyweight) rather than asking again per set.
-export function LogSetForm({ sessionExerciseId, exerciseId, defaultReps, defaultWeightKg, onLogged }: LogSetFormProps) {
+export function LogSetForm({ sessionExerciseId, exerciseId, defaultReps, defaultWeightKg, log, onLogged }: LogSetFormProps) {
   const { exercise, loading: exerciseLoading } = useExercise(exerciseId);
   const { bodyweightKg } = useCurrentBodyweight();
-  const { log } = useSets(sessionExerciseId);
 
   const [weightKg, setWeightKg] = useState(defaultWeightKg ?? DEFAULT_WEIGHT_KG);
   const [reps, setReps] = useState(defaultReps ?? DEFAULT_REPS);

@@ -6,12 +6,23 @@ import { GymDatabase } from "../../../src/storage/db.js";
 import { createSessionRepository } from "../../../src/storage/repositories/sessionRepository.js";
 import { createSessionExerciseRepository } from "../../../src/storage/repositories/sessionExerciseRepository.js";
 import { createBodyweightRepository } from "../../../src/storage/repositories/bodyweightRepository.js";
+import { useSets } from "../../../src/app/hooks/useSets.js";
 import { LogSetForm } from "../../../src/app/session/LogSetForm.js";
 import { uniqueDbName, withDatabase } from "../testDb.js";
+import type { LogSetFormProps } from "../../../src/app/session/LogSetForm.js";
 
 async function seedSessionExercise(db: GymDatabase, exerciseId: string) {
   const session = await createSessionRepository(db).create({ startedAt: Date.now() });
   return createSessionExerciseRepository(db).add({ sessionId: session.id, exerciseId });
+}
+
+// LogSetForm takes `log` as a prop (the same useSets() instance a sibling
+// SetList would read) rather than calling useSets() itself — this harness
+// mirrors that real usage (see ExerciseCard) instead of testing the form
+// in a configuration it's never actually rendered in.
+function Harness(props: Omit<LogSetFormProps, "log">) {
+  const { log } = useSets(props.sessionExerciseId);
+  return <LogSetForm {...props} log={log} />;
 }
 
 describe("LogSetForm", () => {
@@ -21,7 +32,7 @@ describe("LogSetForm", () => {
     const se = await seedSessionExercise(db, "barbell-bench-press");
     const onLogged = vi.fn();
 
-    render(<LogSetForm sessionExerciseId={se.id} exerciseId="barbell-bench-press" onLogged={onLogged} />, {
+    render(<Harness sessionExerciseId={se.id} exerciseId="barbell-bench-press" onLogged={onLogged} />, {
       wrapper: withDatabase(db),
     });
 
@@ -43,7 +54,7 @@ describe("LogSetForm", () => {
   it("shows only a Reps stepper for a pure bodyweight exercise, with no weight logged", async () => {
     const db = new GymDatabase(uniqueDbName());
     const se = await seedSessionExercise(db, "pushup");
-    render(<LogSetForm sessionExerciseId={se.id} exerciseId="pushup" />, { wrapper: withDatabase(db) });
+    render(<Harness sessionExerciseId={se.id} exerciseId="pushup" />, { wrapper: withDatabase(db) });
 
     await waitFor(() => expect(screen.getByRole("group", { name: "Reps" })).toBeInTheDocument());
     expect(screen.queryByRole("group", { name: "Weight" })).not.toBeInTheDocument();
@@ -60,7 +71,7 @@ describe("LogSetForm", () => {
   it("toggling Warmup logs the next set as a warmup, then resets back to off", async () => {
     const db = new GymDatabase(uniqueDbName());
     const se = await seedSessionExercise(db, "barbell-bench-press");
-    render(<LogSetForm sessionExerciseId={se.id} exerciseId="barbell-bench-press" />, { wrapper: withDatabase(db) });
+    render(<Harness sessionExerciseId={se.id} exerciseId="barbell-bench-press" />, { wrapper: withDatabase(db) });
 
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "Warmup set" })).toBeInTheDocument());
     await userEvent.click(screen.getByRole("checkbox", { name: "Warmup set" }));
@@ -76,7 +87,7 @@ describe("LogSetForm", () => {
   it("editing the weight via the numeric field changes what gets logged", async () => {
     const db = new GymDatabase(uniqueDbName());
     const se = await seedSessionExercise(db, "barbell-bench-press");
-    render(<LogSetForm sessionExerciseId={se.id} exerciseId="barbell-bench-press" />, { wrapper: withDatabase(db) });
+    render(<Harness sessionExerciseId={se.id} exerciseId="barbell-bench-press" />, { wrapper: withDatabase(db) });
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Edit Weight" })).toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: "Edit Weight" }));

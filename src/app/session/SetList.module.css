@@ -1,0 +1,24 @@
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.index {
+  min-width: 24px;
+  color: var(--chalk-dim);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.deleteButton {
+  min-width: var(--tap-target-min);
+  min-height: var(--tap-target-min);
+  background: none;
+  border: none;
+  color: var(--chalk-dim);
+  font-size: 20px;
+  cursor: pointer;
+}

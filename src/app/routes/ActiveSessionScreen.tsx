@@ -1,20 +1,81 @@
-import { Navigate } from "react-router-dom";
+import { useRef } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useSession } from "../hooks/useSession.js";
+import { useSessionExercises } from "../hooks/useSessionExercises.js";
+import { ExerciseCard } from "../session/ExerciseCard.js";
+import { AddExerciseField } from "../session/AddExerciseField.js";
+import { Button } from "../ui/Button.js";
+import { EmptyState } from "../ui/EmptyState.js";
+import styles from "./ActiveSessionScreen.module.css";
 
-// A session's logging UI is Tasks 6-7's job. This route exists now so the
-// Start sheet (Task 5) has somewhere to navigate a newly created or
-// resumed session into — there is at most one in_progress session at a
-// time (sessionRepository enforces it), so this route takes no params.
+// The logging screen (spec §14 tasks 6-7): one ExerciseCard per exercise
+// in the session (each with its own last-performance line, set list, and
+// input form), an add-exercise field, and a way to finish. There is at
+// most one in_progress session at a time (sessionRepository enforces it),
+// so this route takes no params.
 export function ActiveSessionScreen() {
-  const { loading, check } = useSession();
+  const { loading, check, finish } = useSession();
+  // Only redirect-on-no-session for a genuinely fresh mount. Finishing
+  // the session also clears `check` (same hook instance, same state) —
+  // without this guard that reactive change would race the explicit
+  // navigate("/today") in handleFinish below and could win, stranding the
+  // user on /start instead.
+  const hadSessionRef = useRef(false);
+  if (check) hadSessionRef.current = true;
 
   if (loading) return null;
-  if (!check) return <Navigate to="/start" replace />;
+  if (!check && !hadSessionRef.current) return <Navigate to="/start" replace />;
+  if (!check) return null;
+
+  const session = check.session;
+  return <SessionContent sessionId={session.id} finish={finish} />;
+}
+
+interface SessionContentProps {
+  sessionId: string;
+  finish(id: string, endedAt: number): Promise<void>;
+}
+
+function SessionContent({ sessionId, finish }: SessionContentProps) {
+  const navigate = useNavigate();
+  const sessionExercises = useSessionExercises(sessionId);
+
+  async function handleFinish() {
+    try {
+      await finish(sessionId, Date.now());
+      navigate("/today");
+    } catch (err) {
+      // Task 18 owns real error-surfacing UI — for now, just don't leave
+      // this unhandled.
+      console.error("Failed to finish session", err);
+    }
+  }
+
+  async function handleAdd(exerciseId: string) {
+    try {
+      await sessionExercises.add({ sessionId, exerciseId });
+    } catch (err) {
+      console.error("Failed to add exercise to session", err);
+    }
+  }
 
   return (
-    <section>
+    <div className={styles.screen}>
       <h1>Session in progress</h1>
-      <p>Logging screen coming soon.</p>
-    </section>
+
+      {!sessionExercises.loading && sessionExercises.sessionExercises.length === 0 && (
+        <EmptyState title="No exercises yet" description="Add your first exercise below to start logging sets." />
+      )}
+
+      {sessionExercises.sessionExercises.map((se) => (
+        <ExerciseCard key={se.id} sessionExerciseId={se.id} exerciseId={se.exerciseId} sessionId={sessionId} />
+      ))}
+
+      <AddExerciseField onAdd={handleAdd} />
+
+      <Button className={styles.finishButton} onClick={handleFinish}>
+        Finish workout
+      </Button>
+    </div>
   );
 }
