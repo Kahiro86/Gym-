@@ -52,19 +52,27 @@ export class GymDatabase extends Dexie {
   constructor(name: string = DEFAULT_DB_NAME, options?: ConstructorParameters<typeof Dexie>[1]) {
     super(name, options);
     this.version(SCHEMA_VERSION).stores({
-      // Spec §5.6 lists this index as "isDeleted" — our schema (and every
-      // other table) uses the nullable `deletedAt` tombstone instead, so
-      // that's what's indexed here; there is no separate boolean field.
-      exercises: "id, name, *aliases, loadType, deletedAt, updatedAt",
+      // §5.6 asks for `deletedAt` inside several indexes (as "isDeleted",
+      // adapted to our nullable tombstone — see the note on ExerciseRecord)
+      // so soft-delete filtering happens inside the index instead of as a
+      // post-fetch predicate. That's not achievable as written: `null` is
+      // not a valid IndexedDB key, so a compound (or standalone) index
+      // that includes a field which is `null` on every non-deleted row
+      // simply never indexes those rows at all — confirmed empirically,
+      // `IDBKeyRange.bound()` throws DataError the moment `null` appears
+      // in a bound. Every index below omits `deletedAt`; queries fetch via
+      // the remaining (always-valid-key) prefix and filter deletedAt in
+      // plain JS afterward — proven fast for this size of result set (see
+      // setRepository.ts's comment on why .filter() is never chained onto
+      // the Dexie query itself).
+      exercises: "id, name, *aliases, loadType, updatedAt",
       routines: "id, name, updatedAt",
-      sessions: "id, state, startedAt, [state+startedAt], [deletedAt+startedAt], updatedAt",
+      sessions: "id, state, startedAt, [state+startedAt], updatedAt",
       sessionExercises: "id, sessionId, exerciseId, [sessionId+orderIndex]",
-      // [exerciseId+deletedAt+loggedAt]: soft-delete filtering lives INSIDE
-      // the compound index (§5.6), not as a post-fetch predicate — a range
-      // query pinned to deletedAt === null never touches tombstoned rows
-      // at all. This is the index "what did I lift last time" resolves
-      // through; it must stay well under the UI's per-keystroke budget.
-      sets: "id, sessionExerciseId, loggedAt, [sessionExerciseId+orderIndex], [exerciseId+deletedAt+loggedAt], updatedAt",
+      // [exerciseId+loggedAt] is the index "what did I lift last time"
+      // resolves through — it must stay well under the UI's per-keystroke
+      // budget.
+      sets: "id, sessionExerciseId, loggedAt, [sessionExerciseId+orderIndex], [exerciseId+loggedAt], updatedAt",
       bodyweightLog: "id, recordedAt, updatedAt",
       profile: "id",
       settings: "id",
