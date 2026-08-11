@@ -1,0 +1,41 @@
+.loader {
+  display: block;
+}
+
+.plate {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: plate-pulse 1.2s ease-in-out infinite;
+}
+
+.plate1 {
+  animation-delay: 0s;
+}
+
+.plate2 {
+  animation-delay: 0.15s;
+}
+
+.plate3 {
+  animation-delay: 0.3s;
+}
+
+@keyframes plate-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scaleY(0.7);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plate {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

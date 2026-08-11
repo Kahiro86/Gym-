@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { openDatabaseSafely } from "../../storage/db.js";
 import { DatabaseContext, type DatabaseContextValue } from "./context.js";
+import { LoadingScreen } from "../ui/LoadingScreen.js";
 
 interface DatabaseProviderProps {
   children: ReactNode;
@@ -19,9 +20,10 @@ function getOrOpen(): Promise<DatabaseContextValue> {
   return openPromise;
 }
 
-// Renders nothing until the database has opened — on real IndexedDB this
-// resolves well within a frame, so there is nothing meaningful to paint in
-// between. Task 18 owns the degraded-mode banner and any real error UI.
+// Shows the branded PlateLoader until the database has opened — on real
+// IndexedDB this resolves well within a frame, so it's rarely seen for
+// more than a flash. Task 18 owns the degraded-mode banner and any real
+// error UI; this is just the loading gap, not that.
 export function DatabaseProvider({ children }: DatabaseProviderProps) {
   const [value, setValue] = useState<DatabaseContextValue | null>(null);
 
@@ -35,7 +37,7 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
     };
   }, []);
 
-  if (!value) return null;
+  if (!value) return <LoadingScreen label="Opening GymXP" />;
 
   return <DatabaseContext.Provider value={value}>{children}</DatabaseContext.Provider>;
 }

@@ -8,6 +8,7 @@ import { MoreScreen } from "./routes/MoreScreen";
 import { ActiveSessionScreen } from "./routes/ActiveSessionScreen";
 import { OnboardingFlow } from "./onboarding/OnboardingFlow";
 import { useOnboarding } from "./hooks/useOnboarding.js";
+import { LoadingScreen } from "./ui/LoadingScreen.js";
 import styles from "./App.module.css";
 
 // No <BrowserRouter> here — main.tsx supplies it, so tests can wrap this
@@ -15,9 +16,10 @@ import styles from "./App.module.css";
 export function App() {
   const { loading, completed, complete } = useOnboarding();
 
-  // Onboarding's own check resolves near-instantly against local storage —
-  // Task 18 owns any real loading/degraded UI for this window.
-  if (loading) return null;
+  // Onboarding's own check resolves near-instantly against local storage,
+  // so this is rarely seen for more than a flash. Task 18 owns any real
+  // degraded/error UI; this is just the loading gap, not that.
+  if (loading) return <LoadingScreen />;
 
   if (!completed) {
     return <OnboardingFlow onDone={complete} />;
