@@ -1,0 +1,177 @@
+import { toLoggedSet } from "../convert.js";
+import { localDayIndex, localWeekIndex } from "../time.js";
+import { computeSessionXp } from "../../domain/xp.js";
+import { MUSCLE_IDS } from "../../domain/muscles.js";
+import { emptyExerciseHistory } from "../../domain/types.js";
+import { ENGINE_VERSION } from "../db.js";
+import type { GymDatabase } from "../db.js";
+import type { MuscleId } from "../../domain/muscles.js";
+import type { BodyweightHistory, ExerciseHistory } from "../../domain/types.js";
+import type { PrSnapshot } from "./setRepository.js";
+import type { SessionExerciseRecord, SetRecord } from "../types.js";
+
+export interface RebuildProgress {
+  processedSessions: number;
+  totalSessions: number;
+}
+
+export interface DerivedStateRepository {
+  getMuscleXp(muscleId: MuscleId): Promise<number>;
+  getAllMuscleXp(): Promise<Record<MuscleId, number>>;
+  getPrSnapshot(exerciseId: string): Promise<PrSnapshot>;
+
+  // Replays every non-deleted, completed, non-warmup set through Layer 1,
+  // in session order, to repopulate both caches from scratch. [v2] §7:
+  // bounded and chunked — the new state is computed fully in memory
+  // first (yielding to the event loop between chunks so a long rebuild
+  // never blocks a real UI's main thread) and the cache tables are only
+  // touched in one fast transaction at the very end, so readers see
+  // either the fully stale-but-usable old state or the fully fresh new
+  // one, never a half-cleared table mid-rebuild. Never awaited
+  // synchronously on app start — call in the background and let
+  // ensureFresh()'s caller decide when that matters.
+  rebuildDerivedState(onProgress?: (progress: RebuildProgress) => void): Promise<void>;
+
+  // Call once at app startup: rebuilds only if the caches were never
+  // built or were built under a since-bumped ENGINE_VERSION. Cheap no-op
+  // otherwise (a single indexed read).
+  ensureFresh(onProgress?: (progress: RebuildProgress) => void): Promise<void>;
+}
+
+const CHUNK_SIZE = 50;
+
+function emptyMuscleXp(): Record<MuscleId, number> {
+  const record = {} as Record<MuscleId, number>;
+  for (const muscle of MUSCLE_IDS) record[muscle] = 0;
+  return record;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Layer 1's HistoryContext takes isFirstSessionOfDay/streakWeeks as opaque
+// caller-supplied inputs — this is where that calendar opinion lives,
+// using each session's own captured tzOffsetMinutes (time.ts) rather than
+// the device's current one, so a rebuild is stable across relocation just
+// like the original write-time classification would have been.
+//
+// No bodyweight-log lookup happens here at all: bodyweightKgAtTime is
+// denormalized onto every SetRecord already (§5.3), so there is no O(n)
+// getNearest-per-set cost to avoid in the first place — the schema
+// already avoids it by construction, which is stronger than making each
+// lookup O(log n).
+async function replaySessions(db: GymDatabase, onProgress?: (progress: RebuildProgress) => void) {
+  const sessions = (await db.sessions.toArray()).filter((s) => s.deletedAt === null).sort((a, b) => a.startedAt - b.startedAt);
+
+  // Pre-fetch and group once — many small per-session queries would
+  // dominate cost far more than the in-memory replay itself.
+  const sessionExercisesBySessionId = new Map<string, SessionExerciseRecord[]>();
+  for (const se of await db.sessionExercises.toArray()) {
+    if (se.deletedAt !== null) continue;
+    const list = sessionExercisesBySessionId.get(se.sessionId);
+    if (list) list.push(se);
+    else sessionExercisesBySessionId.set(se.sessionId, [se]);
+  }
+
+  const setsBySessionExerciseId = new Map<string, SetRecord[]>();
+  for (const row of await db.sets.toArray()) {
+    if (row.deletedAt !== null || !row.completed || row.isWarmup) continue;
+    const list = setsBySessionExerciseId.get(row.sessionExerciseId);
+    if (list) list.push(row);
+    else setsBySessionExerciseId.set(row.sessionExerciseId, [row]);
+  }
+
+  let exerciseHistory: Record<string, ExerciseHistory> = {};
+  let bodyweightHistory: BodyweightHistory | undefined;
+  const trainedDays = new Set<number>();
+  const trainedWeeks = new Set<number>();
+  const muscleXp = emptyMuscleXp();
+
+  for (let i = 0; i < sessions.length; i++) {
+    const session = sessions[i]!;
+    const sessionExerciseRows = sessionExercisesBySessionId.get(session.id) ?? [];
+    const setRows = sessionExerciseRows
+      .flatMap((se) => setsBySessionExerciseId.get(se.id) ?? [])
+      .sort((a, b) => a.loggedAt - b.loggedAt);
+
+    if (setRows.length > 0) {
+      const thisDay = localDayIndex(session.startedAt, session.tzOffsetMinutes);
+      const isFirstSessionOfDay = !trainedDays.has(thisDay);
+
+      const thisWeek = localWeekIndex(session.startedAt, session.tzOffsetMinutes);
+      let streakWeeks = 0;
+      for (let w = thisWeek - 1; trainedWeeks.has(w); w--) streakWeeks++;
+
+      const result = computeSessionXp(
+        { sets: setRows.map(toLoggedSet) },
+        { exerciseHistory, bodyweightHistory, isFirstSessionOfDay, streakWeeks }
+      );
+
+      exerciseHistory = result.updatedExerciseHistory;
+      bodyweightHistory = result.updatedBodyweightHistory;
+      for (const muscle of MUSCLE_IDS) muscleXp[muscle] += result.muscleXp[muscle];
+
+      trainedDays.add(thisDay);
+      trainedWeeks.add(thisWeek);
+    }
+
+    if ((i + 1) % CHUNK_SIZE === 0 || i === sessions.length - 1) {
+      onProgress?.({ processedSessions: i + 1, totalSessions: sessions.length });
+      await sleep(0); // yield to the event loop between chunks
+    }
+  }
+
+  return { exerciseHistory, muscleXp };
+}
+
+export function createDerivedStateRepository(db: GymDatabase): DerivedStateRepository {
+  return {
+    async getMuscleXp(muscleId) {
+      const row = await db.muscleXpCache.get(muscleId);
+      return row?.xp ?? 0;
+    },
+
+    async getAllMuscleXp() {
+      const rows = await db.muscleXpCache.toArray();
+      const result = emptyMuscleXp();
+      for (const row of rows) result[row.muscleId] = row.xp;
+      return result;
+    },
+
+    async getPrSnapshot(exerciseId) {
+      const row = await db.prCache.get(exerciseId);
+      if (!row) return emptyExerciseHistory();
+      return { maxWeightKg: row.maxWeightKg, maxVolumeSingleSet: row.maxVolumeSingleSet, repsAtLoad: row.repsAtLoad };
+    },
+
+    async rebuildDerivedState(onProgress) {
+      const { exerciseHistory, muscleXp } = await replaySessions(db, onProgress);
+
+      await db.transaction("rw", db.prCache, db.muscleXpCache, async () => {
+        await db.prCache.clear();
+        await db.muscleXpCache.clear();
+
+        await db.prCache.bulkAdd(
+          Object.entries(exerciseHistory).map(([exerciseId, h]) => ({
+            exerciseId,
+            maxWeightKg: h.maxWeightKg,
+            maxVolumeSingleSet: h.maxVolumeSingleSet,
+            repsAtLoad: h.repsAtLoad,
+            engineVersion: ENGINE_VERSION,
+          }))
+        );
+
+        await db.muscleXpCache.bulkAdd(
+          MUSCLE_IDS.map((muscleId) => ({ muscleId, xp: muscleXp[muscleId], engineVersion: ENGINE_VERSION }))
+        );
+      });
+    },
+
+    async ensureFresh(onProgress) {
+      const sample = await db.muscleXpCache.limit(1).toArray();
+      const stale = sample.length === 0 || sample[0]!.engineVersion !== ENGINE_VERSION;
+      if (stale) await this.rebuildDerivedState(onProgress);
+    },
+  };
+}
