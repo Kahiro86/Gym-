@@ -5,6 +5,7 @@ import { HistoryScreen } from "./routes/HistoryScreen";
 import { StartScreen } from "./routes/StartScreen";
 import { ProgressScreen } from "./routes/ProgressScreen";
 import { MoreScreen } from "./routes/MoreScreen";
+import { ActiveSessionScreen } from "./routes/ActiveSessionScreen";
 import { OnboardingFlow } from "./onboarding/OnboardingFlow";
 import { useOnboarding } from "./hooks/useOnboarding.js";
 import styles from "./App.module.css";
@@ -32,6 +33,7 @@ export function App() {
           <Route path="/start" element={<StartScreen />} />
           <Route path="/progress" element={<ProgressScreen />} />
           <Route path="/more" element={<MoreScreen />} />
+          <Route path="/session" element={<ActiveSessionScreen />} />
           <Route path="*" element={<Navigate to="/today" replace />} />
         </Routes>
       </main>
