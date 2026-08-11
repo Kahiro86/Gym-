@@ -131,11 +131,14 @@ export class GymDatabase extends Dexie {
   }
 
   async getOrCreateProfile(): Promise<ProfileRecord> {
+    // Resolved before opening the transaction: getDeviceId() needs
+    // db.settings, which isn't part of this transaction's table set — see
+    // the same note on every repository method that mixes tables.
+    const deviceId = await this.getDeviceId();
     return this.transaction("rw", this.profile, async () => {
       const existing = await this.profile.get(PROFILE_ID);
       if (existing) return existing;
 
-      const deviceId = await this.getDeviceId();
       const fresh: ProfileRecord = {
         id: PROFILE_ID,
         heightCm: null,
