@@ -6,6 +6,7 @@ import { StartScreen } from "./routes/StartScreen";
 import { ProgressScreen } from "./routes/ProgressScreen";
 import { MoreScreen } from "./routes/MoreScreen";
 import { ActiveSessionScreen } from "./routes/ActiveSessionScreen";
+import { SessionSummaryScreen } from "./routes/SessionSummaryScreen";
 import { OnboardingFlow } from "./onboarding/OnboardingFlow";
 import { useOnboarding } from "./hooks/useOnboarding.js";
 import { LoadingScreen } from "./ui/LoadingScreen.js";
@@ -36,6 +37,7 @@ export function App() {
           <Route path="/progress" element={<ProgressScreen />} />
           <Route path="/more" element={<MoreScreen />} />
           <Route path="/session" element={<ActiveSessionScreen />} />
+          <Route path="/session/summary" element={<SessionSummaryScreen />} />
           <Route path="*" element={<Navigate to="/today" replace />} />
         </Routes>
       </main>

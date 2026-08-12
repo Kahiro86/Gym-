@@ -1,19 +1,24 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
+import { createDerivedStateRepository } from "../../storage/repositories/derivedStateRepository.js";
+import { levelFromTotalXp } from "../../domain/progression.js";
+import { useDatabase } from "../db/context.js";
 import { useSession } from "../hooks/useSession.js";
 import { useSessionExercises } from "../hooks/useSessionExercises.js";
-import { useSessionXp } from "../hooks/useSessionXp.js";
+import { fetchSessionXp, useSessionXp } from "../hooks/useSessionXp.js";
 import { useWakeLock } from "../hooks/useWakeLock.js";
 import { useActiveSessionStore } from "../store/activeSessionStore.js";
 import { ExerciseCard } from "../session/ExerciseCard.js";
 import { ExerciseSearchSheet } from "../session/ExerciseSearchSheet.js";
 import { RestTimer } from "../session/RestTimer.js";
 import { SessionXpSummary } from "../session/SessionXpSummary.js";
+import { totalMuscleXp } from "../session/sessionSummary.js";
 import { Button } from "../ui/Button.js";
 import { EmptyState } from "../ui/EmptyState.js";
 import { useToast } from "../ui/ToastContext.js";
 import styles from "./ActiveSessionScreen.module.css";
 import type { SessionExerciseRecord } from "../../storage/types.js";
+import type { SessionSummaryState } from "../session/sessionSummary.js";
 
 // The logging screen (spec §14 tasks 6-7 & 10): one ExerciseCard per
 // exercise in the session (each with its own last-performance line, set
@@ -49,6 +54,8 @@ type SheetState = { kind: "add" } | { kind: "swap"; sessionExercise: SessionExer
 
 function SessionContent({ sessionId, finish }: SessionContentProps) {
   const navigate = useNavigate();
+  const { db } = useDatabase();
+  const derived = useMemo(() => createDerivedStateRepository(db), [db]);
   const sessionExercises = useSessionExercises(sessionId);
   const sessionXp = useSessionXp(sessionId);
   const stopRest = useActiveSessionStore((s) => s.stopRest);
@@ -64,8 +71,36 @@ function SessionContent({ sessionId, finish }: SessionContentProps) {
 
   async function handleFinish() {
     try {
+      // Computed imperatively, not read off `sessionXp.xp` — that comes
+      // from a hook whose state this closure captured at render time, so
+      // it could be one write stale (e.g. a delete's fire-and-forget
+      // refresh() still in flight). This is the one authoritative reading
+      // that decides whether the session earned anything at all, so it's
+      // recomputed fresh, the same way fetchSessionXp always has.
+      const finalXp = await fetchSessionXp(db, sessionId);
+      const xpBefore = totalMuscleXp(await derived.getAllMuscleXp());
+
       await finish(sessionId, Date.now());
-      navigate("/today");
+      // finish() only flips the session's own state — nothing else keeps
+      // prCache/muscleXpCache current as sessions complete, so a rebuild
+      // has to happen somewhere. Here, right as a session ends, is the one
+      // place that's true for every session exactly once.
+      await derived.rebuildDerivedState();
+
+      if (finalXp.total > 0) {
+        const xpAfter = totalMuscleXp(await derived.getAllMuscleXp());
+        const summaryState: SessionSummaryState = {
+          xp: finalXp,
+          levelBefore: levelFromTotalXp(xpBefore),
+          levelAfter: levelFromTotalXp(xpAfter),
+        };
+        navigate("/session/summary", { replace: true, state: summaryState });
+      } else {
+        // No completed sets — sessionRepository.finish() discards rather
+        // than completes a session like this (§6.2), so there's nothing
+        // to summarize.
+        navigate("/today");
+      }
     } catch (err) {
       // Task 18 owns real error-surfacing UI — for now, just don't leave
       // this unhandled.

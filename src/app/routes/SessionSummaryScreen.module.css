@@ -1,0 +1,101 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px calc(16px + var(--safe-right)) calc(16px + var(--safe-bottom)) calc(16px + var(--safe-left));
+}
+
+.levelUp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: var(--plate-green);
+  animation: level-up-in 0.4s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .levelUp {
+    animation: none;
+  }
+}
+
+@keyframes level-up-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.levelUpLabel {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--chalk);
+}
+
+.levelUpValue {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 28px;
+  color: var(--chalk);
+  font-variant-numeric: tabular-nums;
+}
+
+.totalCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.totalValue {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 36px;
+  color: var(--plate-yellow);
+  font-variant-numeric: tabular-nums;
+}
+
+.totalLabel {
+  font-size: 13px;
+  color: var(--chalk-dim);
+}
+
+.sectionHeading {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+  margin: 0 0 8px;
+  color: var(--chalk);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.muscleRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--chalk);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.doneButton {
+  width: 100%;
+}

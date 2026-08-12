@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { GymDatabase } from "../../../src/storage/db.js";
 import { createSessionRepository } from "../../../src/storage/repositories/sessionRepository.js";
 import { ActiveSessionScreen } from "../../../src/app/routes/ActiveSessionScreen.js";
+import { SessionSummaryScreen } from "../../../src/app/routes/SessionSummaryScreen.js";
 import { ToastProvider } from "../../../src/app/ui/ToastProvider.js";
 import { uniqueDbName, withDatabase } from "../testDb.js";
 
@@ -15,6 +16,7 @@ function renderAt(db: GymDatabase, path: string) {
       <ToastProvider>
         <Routes>
           <Route path="/session" element={<ActiveSessionScreen />} />
+          <Route path="/session/summary" element={<SessionSummaryScreen />} />
           <Route path="/start" element={<div>START SCREEN</div>} />
           <Route path="/today" element={<div>TODAY SCREEN</div>} />
         </Routes>
@@ -124,6 +126,32 @@ describe("ActiveSessionScreen", () => {
     const completed = await db.sessions.where("state").equals("completed").count();
     const discarded = await db.sessions.where("state").equals("discarded").count();
     expect(completed + discarded).toBe(1); // no sets logged -> discarded, not completed
+    db.close();
+  });
+
+  it("Finish workout with a logged set completes the session and shows the summary screen", async () => {
+    const db = new GymDatabase(uniqueDbName());
+    await createSessionRepository(db).create({ startedAt: Date.now() });
+    renderAt(db, "/session");
+
+    await userEvent.click(await screen.findByRole("button", { name: "Add exercise" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Search exercises" }), "bench press");
+    await userEvent.click(await screen.findByRole("button", { name: "Barbell Bench Press" }));
+    await screen.findByRole("heading", { name: "Barbell Bench Press" });
+    await userEvent.click(await screen.findByRole("button", { name: "Log set" }));
+    await waitFor(() => expect(screen.getByText("20 kg × 8")).toBeInTheDocument());
+
+    await userEvent.click(await screen.findByRole("button", { name: "Finish workout" }));
+
+    expect(await screen.findByRole("heading", { name: "Workout complete" })).toBeInTheDocument();
+    expect(screen.getAllByText(/XP$/).length).toBeGreaterThan(0);
+    expect(screen.queryByText("TODAY SCREEN")).not.toBeInTheDocument();
+
+    const completed = await db.sessions.where("state").equals("completed").count();
+    expect(completed).toBe(1);
+
+    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     db.close();
   });
 });
