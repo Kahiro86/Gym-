@@ -9,6 +9,7 @@ import { RoutineDetailScreen } from "./routes/RoutineDetailScreen";
 import { ActiveSessionScreen } from "./routes/ActiveSessionScreen";
 import { SessionSummaryScreen } from "./routes/SessionSummaryScreen";
 import { OnboardingFlow } from "./onboarding/OnboardingFlow";
+import { PwaUpdateBanner } from "./pwa/PwaUpdateBanner.js";
 import { useOnboarding } from "./hooks/useOnboarding.js";
 import { LoadingScreen } from "./ui/LoadingScreen.js";
 import styles from "./App.module.css";
@@ -29,6 +30,7 @@ export function App() {
 
   return (
     <div className={styles.shell}>
+      <PwaUpdateBanner />
       <main className={styles.content}>
         <Routes>
           <Route path="/" element={<Navigate to="/today" replace />} />
