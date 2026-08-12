@@ -8,6 +8,7 @@ export interface UseRoutinesResult {
   loading: boolean;
   error: Error | null;
   create(input: NewRoutine): Promise<RoutineRecord>;
+  update(id: string, patch: Partial<NewRoutine>): Promise<RoutineRecord>;
   remove(id: string): Promise<void>;
   refresh(): Promise<void>;
 }
@@ -46,6 +47,15 @@ export function useRoutines(): UseRoutinesResult {
     [repo, refresh]
   );
 
+  const update = useCallback<UseRoutinesResult["update"]>(
+    async (id, patch) => {
+      const routine = await repo.update(id, patch);
+      await refresh();
+      return routine;
+    },
+    [repo, refresh]
+  );
+
   const remove = useCallback<UseRoutinesResult["remove"]>(
     async (id) => {
       await repo.softDelete(id);
@@ -54,5 +64,5 @@ export function useRoutines(): UseRoutinesResult {
     [repo, refresh]
   );
 
-  return { routines, loading, error, create, remove, refresh };
+  return { routines, loading, error, create, update, remove, refresh };
 }

@@ -1,0 +1,16 @@
+.input {
+  width: 100%;
+  min-height: var(--tap-target-min);
+  padding: 0 14px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(242, 239, 233, 0.12);
+  background: var(--surface);
+  color: var(--chalk);
+  font-family: var(--font-body);
+  font-size: 15px;
+}
+
+.createButton {
+  width: 100%;
+}

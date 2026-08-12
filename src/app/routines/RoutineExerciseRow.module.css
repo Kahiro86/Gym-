@@ -1,0 +1,37 @@
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface-raised);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.name {
+  color: var(--chalk);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.removeButton {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--chalk-dim);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}

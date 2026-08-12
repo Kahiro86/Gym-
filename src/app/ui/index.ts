@@ -4,6 +4,9 @@ export type { ButtonProps, ButtonVariant, ButtonSize } from "./Button.js";
 export { Stepper } from "./Stepper.js";
 export type { StepperProps } from "./Stepper.js";
 
+export { Toggle } from "./Toggle.js";
+export type { ToggleProps } from "./Toggle.js";
+
 export { Card } from "./Card.js";
 export type { CardProps } from "./Card.js";
 

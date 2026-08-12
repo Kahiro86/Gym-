@@ -5,6 +5,7 @@ import { HistoryScreen } from "./routes/HistoryScreen";
 import { StartScreen } from "./routes/StartScreen";
 import { ProgressScreen } from "./routes/ProgressScreen";
 import { MoreScreen } from "./routes/MoreScreen";
+import { RoutineDetailScreen } from "./routes/RoutineDetailScreen";
 import { ActiveSessionScreen } from "./routes/ActiveSessionScreen";
 import { SessionSummaryScreen } from "./routes/SessionSummaryScreen";
 import { OnboardingFlow } from "./onboarding/OnboardingFlow";
@@ -36,6 +37,7 @@ export function App() {
           <Route path="/start" element={<StartScreen />} />
           <Route path="/progress" element={<ProgressScreen />} />
           <Route path="/more" element={<MoreScreen />} />
+          <Route path="/routines/:id" element={<RoutineDetailScreen />} />
           <Route path="/session" element={<ActiveSessionScreen />} />
           <Route path="/session/summary" element={<SessionSummaryScreen />} />
           <Route path="*" element={<Navigate to="/today" replace />} />
