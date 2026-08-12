@@ -1,8 +1,7 @@
 import { getMuscle } from "../../../domain/muscles.js";
 import { heatColor } from "./heatColor.js";
-import { BASE_SHAPES, BACK_REGIONS, FRONT_REGIONS, VIEWBOX_HEIGHT, VIEWBOX_WIDTH } from "./bodyRegions.js";
+import { BASE_SHAPES, BACK_REGIONS, FRONT_REGIONS, SEAMS, VIEWBOX_HEIGHT, VIEWBOX_WIDTH } from "./bodyRegions.js";
 import styles from "./BodySilhouette.module.css";
-import type { SVGProps } from "react";
 import type { RegionShape } from "./bodyRegions.js";
 import type { MuscleId } from "../../../domain/muscles.js";
 
@@ -17,21 +16,19 @@ export interface BodySilhouetteProps {
   onSelect(muscleId: MuscleId): void;
 }
 
-function renderShape(shape: RegionShape, props: SVGProps<SVGRectElement> & SVGProps<SVGEllipseElement>, key: string) {
-  if (shape.type === "ellipse") {
-    return <ellipse key={key} cx={shape.cx} cy={shape.cy} rx={shape.rx} ry={shape.ry} {...props} />;
-  }
-  return <rect key={key} x={shape.x} y={shape.y} width={shape.width} height={shape.height} rx={shape.rx} {...props} />;
+function pointsAttr(shape: RegionShape): string {
+  return shape.points.map(([x, y]) => `${x},${y}`).join(" ");
 }
 
-// The Progress tab's body diagram (spec follow-up: heatmap UI) — a
-// stylized, tappable front/back silhouette shaded by each muscle's
-// recency-weighted heat (Layer 2's heatmapRepository, itself a thin wire
-// of the pre-existing pure math in src/heatmap/ onto real storage). Layer
-// 3 never computes heat itself: heatByMuscle/everTrained are handed down
-// already-derived from useMuscleHeatmap.
+// The Progress tab's body diagram — a faceted, tappable front/back
+// silhouette shaded by each muscle's recency-weighted heat (Layer 2's
+// heatmapRepository, itself a thin wire of the pre-existing pure math in
+// src/heatmap/ onto real storage). Layer 3 never computes heat itself:
+// heatByMuscle/everTrained are handed down already-derived from
+// useMuscleHeatmap.
 export function BodySilhouette({ view, heatByMuscle, everTrained, selectedMuscleId, onSelect }: BodySilhouetteProps) {
   const regions = view === "front" ? FRONT_REGIONS : BACK_REGIONS;
+  const seams = SEAMS.filter((s) => s.view === view || s.view === "both");
 
   return (
     <svg
@@ -40,13 +37,15 @@ export function BodySilhouette({ view, heatByMuscle, everTrained, selectedMuscle
       role="group"
       aria-label={`${view === "front" ? "Front" : "Back"} body heatmap`}
     >
-      {BASE_SHAPES.map((shape, i) => renderShape(shape, { className: styles.base }, `base-${i}`))}
+      {BASE_SHAPES.map((shape, i) => (
+        <polygon key={`base-${i}`} points={pointsAttr(shape)} className={styles.base} />
+      ))}
       {regions.map((region) => {
         const muscle = getMuscle(region.muscleId);
         const heat = heatByMuscle[region.muscleId] ?? 0;
         const trained = everTrained[region.muscleId] ?? false;
         const selected = selectedMuscleId === region.muscleId;
-        const fill = trained ? heatColor(heat) : "#3a3632";
+        const fill = heatColor(heat);
         return (
           <g
             key={region.muscleId}
@@ -63,12 +62,15 @@ export function BodySilhouette({ view, heatByMuscle, everTrained, selectedMuscle
               }
             }}
           >
-            {region.shapes.map((shape, i) =>
-              renderShape(shape, { fill, className: trained ? undefined : styles.untrained }, `${region.muscleId}-${i}`)
-            )}
+            {region.shapes.map((shape, i) => (
+              <polygon key={`${region.muscleId}-${i}`} points={pointsAttr(shape)} fill={fill} className={styles.facet} />
+            ))}
           </g>
         );
       })}
+      {seams.map((seam, i) => (
+        <polyline key={`seam-${i}`} points={seam.points.map(([x, y]) => `${x},${y}`).join(" ")} className={styles.seam} />
+      ))}
     </svg>
   );
 }

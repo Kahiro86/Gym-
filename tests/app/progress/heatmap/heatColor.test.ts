@@ -2,14 +2,14 @@ import { describe, it, expect } from "vitest";
 import { heatColor } from "../../../../src/app/progress/heatmap/heatColor.js";
 
 describe("heatColor", () => {
-  it("returns the cold surface color at heat 0 and the hot plate-red at heat 1", () => {
-    expect(heatColor(0)).toBe("#2a2724");
-    expect(heatColor(1)).toBe("#d4342a");
+  it("returns near-black navy at heat 0 and bright mint at heat 1", () => {
+    expect(heatColor(0)).toBe("#10182b");
+    expect(heatColor(1)).toBe("#5eead4");
   });
 
   it("passes through each named stop exactly", () => {
-    expect(heatColor(0.33)).toBe("#1e6fbf");
-    expect(heatColor(0.66)).toBe("#e8b317");
+    expect(heatColor(0.35)).toBe("#1c5c52");
+    expect(heatColor(0.7)).toBe("#1fae9c");
   });
 
   it("clamps out-of-range input instead of extrapolating", () => {

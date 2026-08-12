@@ -4,32 +4,58 @@
   gap: 12px;
 }
 
-.viewToggle {
+/* A distinct dark-navy sub-card, deliberately not the app's own warm
+   "calibrated iron" surface tokens — the body diagram reads as its own
+   self-contained widget, same as the reference it was modeled on. */
+.card {
+  background: #0b1120;
+  border-radius: 16px;
+  padding: 16px 8px 12px;
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.viewButton {
+.bodies {
+  display: flex;
+  gap: 4px;
+}
+
+.bodyColumn {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.viewLabel {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7d90b3;
 }
 
 .legend {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 4px;
+  padding: 0 8px;
 }
 
 .legendLabel {
   font-size: 12px;
-  color: var(--chalk-dim);
+  color: #7d90b3;
 }
 
 .legendBar {
   flex: 1;
   height: 8px;
   border-radius: 4px;
-  background: linear-gradient(to right, #2a2724, #1e6fbf, #e8b317, #d4342a);
+  background: linear-gradient(to right, #10182b, #1c5c52, #1fae9c, #5eead4);
 }
 
 .detail {

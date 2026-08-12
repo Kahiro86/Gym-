@@ -13,13 +13,15 @@ import { uniqueDbName, withDatabase } from "../testDb.js";
 const BENCH = "barbell-bench-press";
 
 describe("ProgressScreen", () => {
-  it("defaults to the heatmap tab, with a front/back toggle and a tappable body diagram", async () => {
+  it("defaults to the heatmap tab, showing front and back side by side, with a tappable body diagram", async () => {
     const db = new GymDatabase(uniqueDbName());
     render(<ProgressScreen />, { wrapper: withDatabase(db) });
 
     expect(await screen.findByText("Level 1")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Front" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "Back" })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("group", { name: "Front body heatmap" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Back body heatmap" })).toBeInTheDocument();
+    expect(screen.getByText("Front")).toBeInTheDocument();
+    expect(screen.getByText("Back")).toBeInTheDocument();
     expect(screen.getByText("Tap a muscle to see when it was last trained.")).toBeInTheDocument();
     db.close();
   });
