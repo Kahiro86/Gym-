@@ -36,14 +36,14 @@
 .dataStroke {
   fill: none;
   stroke: var(--plate-red);
-  stroke-width: 2;
+  stroke-width: 1.5;
   stroke-linejoin: round;
-  filter: drop-shadow(0 0 4px var(--plate-red));
+  filter: drop-shadow(0 0 2px var(--plate-red));
 }
 
 .vertex {
   fill: var(--plate-red);
-  filter: drop-shadow(0 0 3px var(--plate-red));
+  filter: drop-shadow(0 0 2px var(--plate-red));
 }
 
 .vertexUntrained {

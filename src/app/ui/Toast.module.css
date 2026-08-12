@@ -11,8 +11,8 @@
   border-radius: var(--radius);
   background: var(--surface-raised);
   color: var(--chalk);
-  border: 2px solid var(--plate-blue);
-  box-shadow: 0 0 10px var(--plate-blue);
+  border: 1px solid var(--plate-blue);
+  box-shadow: 0 0 5px var(--plate-blue);
   z-index: 200;
 }
 

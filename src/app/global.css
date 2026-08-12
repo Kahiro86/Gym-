@@ -15,7 +15,7 @@ body {
   background: var(--surface);
   color: var(--chalk);
   font-family: var(--font-body);
-  font-size: 19px;
+  font-size: 15px;
   /* Non-negotiable per spec §3.3 — weights, reps, timers never jitter. */
   font-variant-numeric: tabular-nums;
   -webkit-tap-highlight-color: transparent;
@@ -36,11 +36,22 @@ body::before {
   z-index: 9999;
 }
 
-h1,
+/* Explicit sizes, not the browser's ~2em/1.5em/1.17em defaults — Press
+   Start 2P is unusually wide per character, so those defaults render far
+   bigger and blockier than a heading actually needs to be. */
+h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 20px;
+  line-height: 1.4;
+  margin: 0;
+}
+
 h2,
 h3 {
   font-family: var(--font-display);
   font-weight: 400;
+  font-size: 14px;
   line-height: 1.4;
   margin: 0;
 }

@@ -7,8 +7,8 @@
 .card {
   background: var(--surface-raised);
   border-radius: var(--radius);
-  border: 2px solid var(--plate-red);
-  box-shadow: 0 0 10px var(--plate-red);
+  border: 1px solid var(--plate-red);
+  box-shadow: 0 0 5px var(--plate-red);
   padding: 20px 8px 16px;
   display: flex;
   flex-direction: column;
@@ -39,7 +39,7 @@
 .detail {
   background: var(--surface-raised);
   border-radius: var(--radius);
-  border: 2px solid var(--chalk-dim);
+  border: 1px solid var(--chalk-dim);
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
@@ -50,11 +50,11 @@
 
 .detailName {
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: 12px;
   color: var(--chalk);
 }
 
 .detailMeta {
-  font-size: 17px;
+  font-size: 14px;
   color: var(--chalk-dim);
 }

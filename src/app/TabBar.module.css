@@ -9,7 +9,7 @@
     calc(var(--tap-target-gap) + var(--safe-left));
   height: calc(var(--tab-bar-height) + var(--safe-bottom));
   background: var(--surface-raised);
-  border-top: 2px solid var(--chalk-dim);
+  border-top: 1px solid var(--chalk-dim);
 }
 
 .tab {
@@ -30,5 +30,5 @@
 .tabActive {
   color: var(--plate-red);
   background: var(--surface);
-  box-shadow: 0 0 6px var(--plate-red) inset;
+  box-shadow: 0 0 3px var(--plate-red) inset;
 }

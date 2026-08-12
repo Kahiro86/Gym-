@@ -4,7 +4,7 @@
   gap: 6px;
   padding: 12px 16px;
   border-radius: var(--radius);
-  border: 2px solid var(--chalk-dim);
+  border: 1px solid var(--chalk-dim);
   background: var(--surface-raised);
 }
 

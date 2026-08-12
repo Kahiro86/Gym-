@@ -26,7 +26,7 @@
   height: 26px;
   border-radius: var(--radius);
   background: var(--surface-raised);
-  border: 2px solid var(--chalk-dim);
+  border: 1px solid var(--chalk-dim);
   transition:
     background 0.15s ease-out,
     box-shadow 0.15s ease-out,
@@ -37,7 +37,7 @@
 .track.on {
   background: var(--plate-green);
   border-color: var(--plate-green);
-  box-shadow: 0 0 6px var(--plate-green);
+  box-shadow: 0 0 3px var(--plate-green);
 }
 
 .thumb {
