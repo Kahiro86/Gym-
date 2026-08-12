@@ -1,12 +1,11 @@
-// Cold-to-hot ramp for the body heatmap: dark navy (matching the
-// heatmap card's own background, so an untrained facet reads as barely
-// distinguishable "cut" in the surface) through muted sea-green up to a
-// bright mint for a muscle trained very recently.
+// Cold-to-hot ramp for the body heatmap, built from the same "calibrated
+// iron" plate tokens the rest of the app already uses for meaning
+// (tokens.css) rather than a fresh, unrelated color scale.
 const STOPS: Array<{ at: number; hex: string }> = [
-  { at: 0, hex: "10182b" }, // near-black navy: cold / not recently trained
-  { at: 0.35, hex: "1c5c52" }, // muted teal-green
-  { at: 0.7, hex: "1fae9c" }, // teal
-  { at: 1, hex: "5eead4" }, // bright mint: hot / fresh
+  { at: 0, hex: "2a2724" }, // --surface-raised: cold / not recently trained
+  { at: 0.33, hex: "1e6fbf" }, // --plate-blue
+  { at: 0.66, hex: "e8b317" }, // --plate-yellow
+  { at: 1, hex: "d4342a" }, // --plate-red: hot
 ];
 
 function hexToRgb(hex: string): [number, number, number] {

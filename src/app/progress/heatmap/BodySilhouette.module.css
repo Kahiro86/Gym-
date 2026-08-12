@@ -1,41 +1,35 @@
 .svg {
   width: 100%;
   height: auto;
+  max-height: 60vh;
   display: block;
   margin: 0 auto;
 }
 
 .base {
-  fill: #161d33;
-  stroke: #0b1120;
-  stroke-width: 1.5;
-}
-
-.facet {
-  stroke: #0b1120;
-  stroke-width: 1.5;
-  transition:
-    fill 200ms ease,
-    stroke 120ms ease;
+  fill: var(--surface);
+  stroke: var(--surface-raised);
+  stroke-width: 2;
 }
 
 .region {
   cursor: pointer;
+  transition: opacity 120ms ease;
 }
 
-.region:hover .facet {
-  stroke: #1fae9c;
+.region:hover {
+  opacity: 0.85;
 }
 
-.selected .facet {
-  stroke: #f2efe9;
+.selected rect,
+.selected ellipse {
+  stroke: var(--chalk);
   stroke-width: 2;
 }
 
-.seam {
-  fill: none;
-  stroke: #0b1120;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  pointer-events: none;
+.untrained {
+  opacity: 0.55;
+  stroke: var(--chalk-dim);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
 }

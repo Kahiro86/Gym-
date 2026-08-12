@@ -2,20 +2,23 @@ import { useMemo, useState } from "react";
 import { getMuscle } from "../../../domain/muscles.js";
 import { useMuscleHeatmap } from "../../hooks/useMuscleHeatmap.js";
 import { formatRelativeDay } from "../../formatRelativeDay.js";
+import { Button } from "../../ui/Button.js";
 import { BodySilhouette } from "./BodySilhouette.js";
 import styles from "./BodyHeatmap.module.css";
 import type { MuscleId } from "../../../domain/muscles.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// The Progress tab's body diagram: front and back shown side by side (not
-// tabbed — this is the "at a glance" view), each shaded by muscle heat
-// (useMuscleHeatmap -> Layer 2's heatmapRepository), with a legend and a
-// detail line for whichever muscle was last tapped. Layer 3 never
-// computes heat/freshness itself — it only reads the already-derived
-// RecencyMapEntry[] and formats it.
+type BodyView = "front" | "back";
+
+// The Progress tab's body diagram: a tappable front/back silhouette
+// shaded by each muscle's current heat (useMuscleHeatmap -> Layer 2's
+// heatmapRepository), with a legend and a detail line for whichever
+// muscle was last tapped. Layer 3 never computes heat/freshness itself —
+// it only reads the already-derived RecencyMapEntry[] and formats it.
 export function BodyHeatmap() {
   const { entries } = useMuscleHeatmap();
+  const [view, setView] = useState<BodyView>("front");
   const [selectedMuscleId, setSelectedMuscleId] = useState<MuscleId | null>(null);
 
   const heatByMuscle = useMemo(() => {
@@ -36,23 +39,35 @@ export function BodyHeatmap() {
 
   return (
     <div className={styles.wrapper}>
-      <div className={styles.card}>
-        <div className={styles.bodies}>
-          <div className={styles.bodyColumn}>
-            <span className={styles.viewLabel}>Front</span>
-            <BodySilhouette view="front" heatByMuscle={heatByMuscle} everTrained={everTrained} selectedMuscleId={selectedMuscleId} onSelect={setSelectedMuscleId} />
-          </div>
-          <div className={styles.bodyColumn}>
-            <span className={styles.viewLabel}>Back</span>
-            <BodySilhouette view="back" heatByMuscle={heatByMuscle} everTrained={everTrained} selectedMuscleId={selectedMuscleId} onSelect={setSelectedMuscleId} />
-          </div>
-        </div>
+      <div className={styles.viewToggle} role="tablist" aria-label="Body view">
+        <Button
+          type="button"
+          role="tab"
+          aria-selected={view === "front"}
+          variant={view === "front" ? "secondary" : "ghost"}
+          className={styles.viewButton}
+          onClick={() => setView("front")}
+        >
+          Front
+        </Button>
+        <Button
+          type="button"
+          role="tab"
+          aria-selected={view === "back"}
+          variant={view === "back" ? "secondary" : "ghost"}
+          className={styles.viewButton}
+          onClick={() => setView("back")}
+        >
+          Back
+        </Button>
+      </div>
 
-        <div className={styles.legend} aria-hidden="true">
-          <span className={styles.legendLabel}>Stale</span>
-          <span className={styles.legendBar} />
-          <span className={styles.legendLabel}>Fresh</span>
-        </div>
+      <BodySilhouette view={view} heatByMuscle={heatByMuscle} everTrained={everTrained} selectedMuscleId={selectedMuscleId} onSelect={setSelectedMuscleId} />
+
+      <div className={styles.legend} aria-hidden="true">
+        <span className={styles.legendLabel}>Stale</span>
+        <span className={styles.legendBar} />
+        <span className={styles.legendLabel}>Fresh</span>
       </div>
 
       <div className={styles.detail} role="status">
