@@ -1,18 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { createDerivedStateRepository } from "../../storage/repositories/derivedStateRepository.js";
-import { levelFromTotalXp } from "../../domain/progression.js";
 import { useDatabase } from "../db/context.js";
 import { useSession } from "../hooks/useSession.js";
 import { useSessionExercises } from "../hooks/useSessionExercises.js";
 import { fetchSessionXp, useSessionXp } from "../hooks/useSessionXp.js";
+import { fetchLifetimeLevel } from "../hooks/useLifetimeLevel.js";
 import { useWakeLock } from "../hooks/useWakeLock.js";
 import { useActiveSessionStore } from "../store/activeSessionStore.js";
 import { ExerciseCard } from "../session/ExerciseCard.js";
 import { ExerciseSearchSheet } from "../session/ExerciseSearchSheet.js";
 import { RestTimer } from "../session/RestTimer.js";
 import { SessionXpSummary } from "../session/SessionXpSummary.js";
-import { totalMuscleXp } from "../session/sessionSummary.js";
 import { Button } from "../ui/Button.js";
 import { EmptyState } from "../ui/EmptyState.js";
 import { useToast } from "../ui/ToastContext.js";
@@ -78,7 +77,7 @@ function SessionContent({ sessionId, finish }: SessionContentProps) {
       // that decides whether the session earned anything at all, so it's
       // recomputed fresh, the same way fetchSessionXp always has.
       const finalXp = await fetchSessionXp(db, sessionId);
-      const xpBefore = totalMuscleXp(await derived.getAllMuscleXp());
+      const levelBefore = await fetchLifetimeLevel(db);
 
       await finish(sessionId, Date.now());
       // finish() only flips the session's own state — nothing else keeps
@@ -88,11 +87,10 @@ function SessionContent({ sessionId, finish }: SessionContentProps) {
       await derived.rebuildDerivedState();
 
       if (finalXp.total > 0) {
-        const xpAfter = totalMuscleXp(await derived.getAllMuscleXp());
         const summaryState: SessionSummaryState = {
           xp: finalXp,
-          levelBefore: levelFromTotalXp(xpBefore),
-          levelAfter: levelFromTotalXp(xpAfter),
+          levelBefore,
+          levelAfter: await fetchLifetimeLevel(db),
         };
         navigate("/session/summary", { replace: true, state: summaryState });
       } else {

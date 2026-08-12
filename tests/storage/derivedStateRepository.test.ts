@@ -389,4 +389,61 @@ describe("DerivedStateRepository", () => {
       db.close();
     });
   });
+
+  describe("getCurrentStreakWeeks", () => {
+    it("is 0 for an empty database", async () => {
+      const db = new GymDatabase(uniqueDbName());
+      const derived = createDerivedStateRepository(db);
+      expect(await derived.getCurrentStreakWeeks(0)).toBe(0);
+      db.close();
+    });
+
+    it("counts the current week once it's been trained", async () => {
+      const db = new GymDatabase(uniqueDbName());
+      const sets = createSetRepository(db);
+      const derived = createDerivedStateRepository(db);
+      const { session, sessionExercise } = await setupSessionExercise(db, BENCH, 0);
+      await sets.log({ sessionExerciseId: sessionExercise.id, weightKg: 60, reps: 5, bodyweightKgAtTime: 80, loggedAt: 0 });
+      await finishSession(db, session.id, 100);
+
+      expect(await derived.getCurrentStreakWeeks(0)).toBe(1);
+      db.close();
+    });
+
+    it("doesn't require the current week to already be trained — a streak survives up to the moment it would be broken", async () => {
+      const db = new GymDatabase(uniqueDbName());
+      const sets = createSetRepository(db);
+      const derived = createDerivedStateRepository(db);
+      const { session, sessionExercise } = await setupSessionExercise(db, BENCH, -WEEK);
+      await sets.log({ sessionExerciseId: sessionExercise.id, weightKg: 60, reps: 5, bodyweightKgAtTime: 80, loggedAt: -WEEK });
+      await finishSession(db, session.id, -WEEK + 100);
+
+      // "now" (week 0) hasn't been trained yet, but last week was — the
+      // streak going into this week is still 1, not reset to 0.
+      expect(await derived.getCurrentStreakWeeks(0)).toBe(1);
+      db.close();
+    });
+
+    it("counts consecutive trained weeks and stops at the first gap", async () => {
+      const db = new GymDatabase(uniqueDbName());
+      const sets = createSetRepository(db);
+      const derived = createDerivedStateRepository(db);
+
+      // Trained this week and the two weeks before it...
+      for (const weekOffset of [0, -1, -2]) {
+        const startedAt = weekOffset * WEEK;
+        const { session, sessionExercise } = await setupSessionExercise(db, BENCH, startedAt);
+        await sets.log({ sessionExerciseId: sessionExercise.id, weightKg: 60, reps: 5, bodyweightKgAtTime: 80, loggedAt: startedAt });
+        await finishSession(db, session.id, startedAt + 100);
+      }
+      // ...but not the week before that (a gap) — an even older session
+      // must not reach across it and extend the streak.
+      const gapCrossing = await setupSessionExercise(db, BENCH, -4 * WEEK);
+      await sets.log({ sessionExerciseId: gapCrossing.sessionExercise.id, weightKg: 60, reps: 5, bodyweightKgAtTime: 80, loggedAt: -4 * WEEK });
+      await finishSession(db, gapCrossing.session.id, -4 * WEEK + 100);
+
+      expect(await derived.getCurrentStreakWeeks(0)).toBe(3);
+      db.close();
+    });
+  });
 });

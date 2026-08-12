@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { totalMuscleXp } from "../../../src/app/session/sessionSummary.js";
-import { MUSCLE_IDS } from "../../../src/domain/muscles.js";
-import type { MuscleId } from "../../../src/domain/muscles.js";
+import { totalMuscleXp } from "../../src/app/xpTotals.js";
+import { MUSCLE_IDS } from "../../src/domain/muscles.js";
+import type { MuscleId } from "../../src/domain/muscles.js";
 
 function emptyMuscleXp(): Record<MuscleId, number> {
   const record = {} as Record<MuscleId, number>;

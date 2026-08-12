@@ -1,5 +1,5 @@
 import { toLoggedSet } from "../convert.js";
-import { localDayIndex, localWeekIndex } from "../time.js";
+import { captureTzOffsetMinutes, localDayIndex, localWeekIndex } from "../time.js";
 import { computeSessionXp } from "../../domain/xp.js";
 import { MUSCLE_IDS } from "../../domain/muscles.js";
 import { emptyExerciseHistory } from "../../domain/types.js";
@@ -49,6 +49,15 @@ export interface DerivedStateRepository {
   // total session count so far) but is only ever called for the one
   // active session at a time, not per keystroke.
   getHistoryContextForSession(sessionId: string): Promise<HistoryContext>;
+
+  // How many consecutive Monday-start weeks (current device timezone,
+  // spec §4) have had a completed session, counting up to and including
+  // this week if it's already been trained. Same trainedWeeks bookkeeping
+  // replaySessions always does internally — this just reads it back
+  // relative to "now" instead of stopping at a specific session. Not
+  // cached: like getHistoryContextForSession, it's only ever called for
+  // one screen at a time, not per keystroke.
+  getCurrentStreakWeeks(now?: number): Promise<number>;
 }
 
 const CHUNK_SIZE = 50;
@@ -160,7 +169,7 @@ async function replaySessions(db: GymDatabase, options: ReplayOptions = {}) {
     }
   }
 
-  return { exerciseHistory, muscleXp, historyContextForStoppedSession };
+  return { exerciseHistory, muscleXp, historyContextForStoppedSession, trainedWeeks };
 }
 
 export function createDerivedStateRepository(db: GymDatabase): DerivedStateRepository {
@@ -231,6 +240,15 @@ export function createDerivedStateRepository(db: GymDatabase): DerivedStateRepos
           streakWeeks: 0,
         }
       );
+    },
+
+    async getCurrentStreakWeeks(now = Date.now()) {
+      const { trainedWeeks } = await replaySessions(db);
+      const thisWeek = localWeekIndex(now, captureTzOffsetMinutes(now));
+
+      let streakWeeks = trainedWeeks.has(thisWeek) ? 1 : 0;
+      for (let w = thisWeek - 1; trainedWeeks.has(w); w--) streakWeeks++;
+      return streakWeeks;
     },
   };
 }
