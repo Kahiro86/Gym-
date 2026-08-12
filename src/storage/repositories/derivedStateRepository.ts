@@ -6,7 +6,7 @@ import { emptyExerciseHistory } from "../../domain/types.js";
 import { ENGINE_VERSION } from "../db.js";
 import type { GymDatabase } from "../db.js";
 import type { MuscleId } from "../../domain/muscles.js";
-import type { BodyweightHistory, ExerciseHistory, HistoryContext } from "../../domain/types.js";
+import type { BodyweightHistory, ExerciseHistory, HistoryContext, SessionXpResult } from "../../domain/types.js";
 import type { PrSnapshot } from "./setRepository.js";
 import type { SessionExerciseRecord, SetRecord } from "../types.js";
 
@@ -58,6 +58,17 @@ export interface DerivedStateRepository {
   // cached: like getHistoryContextForSession, it's only ever called for
   // one screen at a time, not per keystroke.
   getCurrentStreakWeeks(now?: number): Promise<number>;
+
+  // Every trained session's own SessionXpResult, keyed by session id — for
+  // listing many sessions at once (History tab, spec §14 task 14) without
+  // paying getHistoryContextForSession's O(sessions-before-it) replay cost
+  // once per row (which would make an N-row list O(n²)). One full replay
+  // already computes every session's result along the way; this just keeps
+  // them instead of discarding all but the running muscleXp total. A
+  // session with no completed sets (never trained, e.g. abandoned before
+  // logging anything) has no entry — same key-absence convention as
+  // HistoryContext.exerciseHistory.
+  listSessionXpTotals(): Promise<Map<string, SessionXpResult>>;
 }
 
 const CHUNK_SIZE = 50;
@@ -118,6 +129,7 @@ async function replaySessions(db: GymDatabase, options: ReplayOptions = {}) {
   const trainedDays = new Set<number>();
   const trainedWeeks = new Set<number>();
   const muscleXp = emptyMuscleXp();
+  const sessionXpBySessionId = new Map<string, SessionXpResult>();
   let historyContextForStoppedSession: HistoryContext | undefined;
 
   for (let i = 0; i < sessions.length; i++) {
@@ -158,6 +170,7 @@ async function replaySessions(db: GymDatabase, options: ReplayOptions = {}) {
       exerciseHistory = result.updatedExerciseHistory;
       bodyweightHistory = result.updatedBodyweightHistory;
       for (const muscle of MUSCLE_IDS) muscleXp[muscle] += result.muscleXp[muscle];
+      sessionXpBySessionId.set(session.id, result);
 
       trainedDays.add(thisDay);
       trainedWeeks.add(thisWeek);
@@ -169,7 +182,7 @@ async function replaySessions(db: GymDatabase, options: ReplayOptions = {}) {
     }
   }
 
-  return { exerciseHistory, muscleXp, historyContextForStoppedSession, trainedWeeks };
+  return { exerciseHistory, muscleXp, historyContextForStoppedSession, trainedWeeks, sessionXpBySessionId };
 }
 
 export function createDerivedStateRepository(db: GymDatabase): DerivedStateRepository {
@@ -249,6 +262,11 @@ export function createDerivedStateRepository(db: GymDatabase): DerivedStateRepos
       let streakWeeks = trainedWeeks.has(thisWeek) ? 1 : 0;
       for (let w = thisWeek - 1; trainedWeeks.has(w); w--) streakWeeks++;
       return streakWeeks;
+    },
+
+    async listSessionXpTotals() {
+      const { sessionXpBySessionId } = await replaySessions(db);
+      return sessionXpBySessionId;
     },
   };
 }

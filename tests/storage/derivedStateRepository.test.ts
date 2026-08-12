@@ -446,4 +446,57 @@ describe("DerivedStateRepository", () => {
       db.close();
     });
   });
+
+  describe("listSessionXpTotals", () => {
+    it("is empty for a database with no trained sessions", async () => {
+      const db = new GymDatabase(uniqueDbName());
+      const derived = createDerivedStateRepository(db);
+      expect((await derived.listSessionXpTotals()).size).toBe(0);
+      db.close();
+    });
+
+    it("has no entry for a session with no completed sets", async () => {
+      const db = new GymDatabase(uniqueDbName());
+      const derived = createDerivedStateRepository(db);
+      const { session } = await setupSessionExercise(db, BENCH, 0);
+
+      const totals = await derived.listSessionXpTotals();
+      expect(totals.has(session.id)).toBe(false);
+      db.close();
+    });
+
+    it("matches computeSessionXp for each of several sessions, using each one's own prior history", async () => {
+      const db = new GymDatabase(uniqueDbName());
+      const sets = createSetRepository(db);
+      const derived = createDerivedStateRepository(db);
+
+      const a = await setupSessionExercise(db, BENCH, 0);
+      await sets.log({ sessionExerciseId: a.sessionExercise.id, weightKg: 60, reps: 5, bodyweightKgAtTime: 80, loggedAt: 0 });
+      await finishSession(db, a.session.id, 100);
+
+      const b = await setupSessionExercise(db, BENCH, DAY);
+      await sets.log({ sessionExerciseId: b.sessionExercise.id, weightKg: 65, reps: 5, bodyweightKgAtTime: 80, loggedAt: DAY });
+      await finishSession(db, b.session.id, DAY + 100);
+
+      const totals = await derived.listSessionXpTotals();
+
+      const expectedA = computeSessionXp(
+        { sets: [{ exerciseId: BENCH, weightKg: 60, reps: 5, bodyweightKg: 80 } as LoggedSet] },
+        { exerciseHistory: {}, isFirstSessionOfDay: true, streakWeeks: 0 }
+      );
+      expect(totals.get(a.session.id)?.total).toBeCloseTo(expectedA.total, 5);
+
+      const expectedB = computeSessionXp(
+        { sets: [{ exerciseId: BENCH, weightKg: 65, reps: 5, bodyweightKg: 80 } as LoggedSet] },
+        {
+          exerciseHistory: expectedA.updatedExerciseHistory,
+          bodyweightHistory: expectedA.updatedBodyweightHistory,
+          isFirstSessionOfDay: true,
+          streakWeeks: 0,
+        }
+      );
+      expect(totals.get(b.session.id)?.total).toBeCloseTo(expectedB.total, 5);
+      db.close();
+    });
+  });
 });

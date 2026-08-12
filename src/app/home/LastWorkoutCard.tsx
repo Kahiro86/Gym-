@@ -1,6 +1,6 @@
 import { Card } from "../ui/Card.js";
 import { EmptyState } from "../ui/EmptyState.js";
-import { formatRelativeDay } from "./formatRelativeDay.js";
+import { formatRelativeDay } from "../formatRelativeDay.js";
 import styles from "./LastWorkoutCard.module.css";
 import type { LastSession } from "../hooks/useLastCompletedSession.js";
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatRelativeDay } from "../../../src/app/home/formatRelativeDay.js";
+import { formatRelativeDay } from "../../src/app/formatRelativeDay.js";
 
 const NOON = new Date(2026, 0, 15, 12, 0, 0).getTime(); // 2026-01-15 noon, local
 const DAY_MS = 24 * 60 * 60 * 1000;

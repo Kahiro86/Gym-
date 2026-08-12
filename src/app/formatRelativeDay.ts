@@ -6,10 +6,11 @@ function startOfDay(epochMs: number): number {
   return d.getTime();
 }
 
-// A short, human "how long ago" label for the Today tab's last-workout
-// card — deliberately just device-local calendar days (Date, not
-// time.ts's own day-boundary math), since this is a passing display
-// label, not anything that changes what a set counts toward.
+// A short, human "how long ago" label — used by the Today tab's
+// last-workout card and the History tab's session list. Deliberately just
+// device-local calendar days (Date, not time.ts's own day-boundary math),
+// since this is a passing display label, not anything that changes what a
+// set counts toward.
 export function formatRelativeDay(epochMs: number, now: number = Date.now()): string {
   const diffDays = Math.round((startOfDay(now) - startOfDay(epochMs)) / DAY_MS);
   if (diffDays <= 0) return "Today";
