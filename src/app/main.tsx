@@ -16,10 +16,17 @@ if (!container) {
   throw new Error("Root element #root not found.");
 }
 
+// import.meta.env.BASE_URL mirrors vite.config.ts's `base` ("/" in dev,
+// "/Gym-/" in production — see that file's comment) — read back here
+// instead of hardcoding the subpath a second time. BrowserRouter wants no
+// trailing slash on basename ("/Gym-", not "/Gym-/"); "/" strips down to
+// "" (no basename), matching its own no-subpath default.
+const basename = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 createRoot(container).render(
   <StrictMode>
     <DatabaseProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={basename}>
         <ToastProvider>
           <App />
         </ToastProvider>

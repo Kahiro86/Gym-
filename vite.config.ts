@@ -2,7 +2,15 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // GitHub Pages serves this repo at /Gym-/, not the domain root — dev
+  // stays at "/" so the existing local workflow (Playwright checks,
+  // `npm run dev`) is untouched; only the production build (what the
+  // deploy workflow actually ships) needs the subpath. Everything that
+  // needs to know this reads it back from import.meta.env.BASE_URL
+  // (main.tsx's BrowserRouter basename) rather than hardcoding it a
+  // second time.
+  base: mode === "production" ? "/Gym-/" : "/",
   plugins: [
     react(),
     VitePWA({
@@ -21,7 +29,11 @@ export default defineConfig({
         theme_color: "#1f1d1b",
         background_color: "#1f1d1b",
         display: "standalone",
-        start_url: "/",
+        // Relative, not "/" — resolves against the manifest's own URL
+        // (wherever `base` ends up placing it), so this doesn't need its
+        // own copy of the subpath.
+        start_url: ".",
+        scope: ".",
         icons: [
           { src: "icons/icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "icons/icon-512.png", sizes: "512x512", type: "image/png" },
@@ -41,4 +53,4 @@ export default defineConfig({
     outDir: "dist",
     sourcemap: true,
   },
-});
+}));
