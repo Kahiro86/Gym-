@@ -14,11 +14,11 @@
 
 .interactive {
   cursor: pointer;
-  border-radius: 12px;
+  border-radius: var(--radius);
 }
 
 .interactive:active {
-  background: rgba(242, 239, 233, 0.06);
+  background: rgba(212, 255, 246, 0.08);
 }
 
 .leading {

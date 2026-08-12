@@ -5,8 +5,10 @@
   gap: 12px;
   min-height: var(--tap-target-min);
   padding: 8px 16px;
-  border-radius: 12px;
+  border-radius: var(--radius);
+  border: 2px solid var(--plate-blue);
   background: var(--plate-blue);
+  box-shadow: 0 0 10px var(--plate-blue);
   color: var(--chalk);
 }
 

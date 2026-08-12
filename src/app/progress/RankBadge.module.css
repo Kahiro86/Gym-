@@ -8,20 +8,21 @@
   min-width: 24px;
   height: 24px;
   padding: 0 6px;
-  border-radius: 6px;
+  border-radius: var(--radius);
   font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 13px;
+  font-weight: 400;
+  font-size: 11px;
   color: var(--chalk);
 }
 
 .unranked {
   background: var(--surface);
   color: var(--chalk-dim);
+  border: 1px solid var(--chalk-dim);
 }
 
 .F {
-  background: #5a5651;
+  background: #1a2b29;
 }
 
 .E {

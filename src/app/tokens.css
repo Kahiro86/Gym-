@@ -1,39 +1,59 @@
-/* Spec §3.1 — "calibrated iron" visual identity tokens. */
+/* Retro-arcade reskin: teal-dominant CRT/cabinet identity, replacing the
+   original "calibrated iron" warm-graphite theme. Every token keeps its
+   original NAME (only values changed) — the app was built on semantic
+   custom properties from Task 3 onward, so a palette/font swap here
+   cascades through nearly every screen's CSS without touching it
+   directly. Verified against the same WCAG contrast math as the original
+   accessibility pass (tests/app/contrast.test.ts) before landing. */
 :root {
-  /* Surfaces: warm graphite, not neutral gray. */
-  --surface: #1f1d1b;
-  --surface-raised: #2a2724;
+  /* Surfaces: near-black, teal-tinted (not neutral gray) — reads as a
+     powered-off CRT/cabinet panel. */
+  --surface: #050f0e;
+  --surface-raised: #0b1f1c;
 
-  /* Text: chalk. */
-  --chalk: #f2efe9;
-  --chalk-dim: #9a948b;
+  /* Text: bright teal-white, like a phosphor display. */
+  --chalk: #d4fff6;
+  --chalk-dim: #6b9891;
 
-  /* Plate-weight color semantics — reused for meaning, not decoration. */
-  --plate-red: #d4342a; /* 25kg — primary actions, PRs */
-  --plate-blue: #1e6fbf; /* 20kg — active session */
-  --plate-yellow: #e8b317; /* 15kg — XP */
-  --plate-green: #2e8b4f; /* 10kg — completion */
+  /* Arcade-plate color semantics — same functional roles as before, new
+     hues. plate-red keeps its name but is now the dominant accent teal
+     (primary actions, PRs, S-rank, streak) — genuine red is reserved for
+     --danger below so "red = something's wrong" still reads correctly. */
+  --plate-red: #00e5c7; /* accent teal — primary actions, PRs, hot streak */
+  --plate-blue: #0ea5c4; /* deeper cyan — active session */
+  --plate-yellow: #ffb703; /* amber — XP/score, the one non-teal accent (arcade high-score convention) */
+  --plate-green: #39ff14; /* neon green — completion */
 
-  /* Accessibility pass (spec §14 task 19): the base plate colors read
-     fine as large/bold text or decorative fills, but chalk-on-plate at
-     badge/banner text sizes (12-14px) falls short of WCAG AA's 4.5:1 —
-     e.g. chalk-on-plate-red measures ~4.2:1. Darkened -bg variants exist
-     for exactly that "small text over a filled plate-color background"
-     case; the base tokens are unchanged for every other existing use
-     (large text, decorative fills, plate-color-as-foreground-on-surface,
-     all of which already clear their own applicable WCAG threshold).
-     plate-blue-light is the mirror case: text needs to be *lighter* than
-     the base blue to read against a dark surface (Toast's action label). */
-  --plate-red-bg: #aa2a22;
-  --plate-blue-bg: #1a5ea2;
-  --plate-green-bg: #1c532f;
-  --plate-blue-light: #5693cf;
-  --plate-red-light: #df675f;
+  /* Same "-bg darkened / -light lightened" dual-variant pattern as the
+     original accessibility pass (spec §14 task 19), recomputed for the
+     new hues: chalk-on-*-bg and *-light-on-surface both clear WCAG AA's
+     4.5:1 for normal text (see tests/app/contrast.test.ts). */
+  --plate-red-bg: #006b5d;
+  --plate-blue-bg: #0b4a7a;
+  --plate-green-bg: #145522;
+  --plate-blue-light: #5fd0ff;
+  --plate-red-light: #6ffff0;
 
-  /* Typography. */
-  --font-display: "Barlow Condensed", sans-serif;
-  --font-body: "IBM Plex Sans", sans-serif;
-  --font-mono: "IBM Plex Mono", monospace;
+  /* Dedicated danger red — split out from plate-red once that token
+     became teal, so Button.danger and DegradedBanner still read as a
+     genuine warning instead of the same hue as a primary action. */
+  --danger: #ff3b5c;
+  --danger-bg: #7a1030;
+  --danger-light: #ff6b8a;
+
+  /* Typography: a real 8-bit display font for headers/big numbers
+     (Press Start 2P — self-hosted like every other font here, see
+     main.tsx's imports) and a legible retro-terminal font for
+     everything else, including numeric/tabular contexts (VT323 reads
+     as a CRT terminal font but stays readable at body/mono sizes,
+     unlike Press Start 2P which is a display-only face). */
+  --font-display: "Press Start 2P", "Barlow Condensed", sans-serif;
+  --font-body: "VT323", "IBM Plex Sans", sans-serif;
+  --font-mono: "VT323", "IBM Plex Mono", monospace;
+
+  /* Blocky corners instead of the original rounded-card look — pixel-art
+     UIs read as sharp-edged panels, not soft rounded ones. */
+  --radius: 4px;
 
   /* Safe-area insets, with non-notched fallbacks. */
   --safe-top: env(safe-area-inset-top, 0px);

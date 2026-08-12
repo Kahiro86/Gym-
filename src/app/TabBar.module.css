@@ -9,7 +9,7 @@
     calc(var(--tap-target-gap) + var(--safe-left));
   height: calc(var(--tab-bar-height) + var(--safe-bottom));
   background: var(--surface-raised);
-  border-top: 1px solid rgba(242, 239, 233, 0.08);
+  border-top: 2px solid var(--chalk-dim);
 }
 
 .tab {
@@ -20,13 +20,15 @@
   justify-content: center;
   color: var(--chalk-dim);
   text-decoration: none;
-  font-family: var(--font-body);
-  font-weight: 500;
-  font-size: 13px;
-  border-radius: 8px;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 9px;
+  text-transform: uppercase;
+  border-radius: var(--radius);
 }
 
 .tabActive {
-  color: var(--chalk);
-  background: rgba(242, 239, 233, 0.06);
+  color: var(--plate-red);
+  background: var(--surface);
+  box-shadow: 0 0 6px var(--plate-red) inset;
 }

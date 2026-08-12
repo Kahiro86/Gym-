@@ -1,10 +1,12 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import "@fontsource/barlow-condensed/600.css";
-import "@fontsource/ibm-plex-sans/400.css";
-import "@fontsource/ibm-plex-sans/500.css";
-import "@fontsource/ibm-plex-mono/400.css";
+// Retro-arcade fonts (tokens.css's --font-display/--font-body/--font-mono)
+// — self-hosted like the "calibrated iron" theme's fonts were, so this is
+// still offline-first. Both ship a single 400 weight only (pixel/terminal
+// faces don't come in a range of weights).
+import "@fontsource/press-start-2p/400.css";
+import "@fontsource/vt323/400.css";
 import "./tokens.css";
 import "./global.css";
 import { App } from "./App";

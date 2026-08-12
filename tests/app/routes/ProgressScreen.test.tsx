@@ -13,14 +13,16 @@ import { uniqueDbName, withDatabase } from "../testDb.js";
 const BENCH = "barbell-bench-press";
 
 describe("ProgressScreen", () => {
-  it("defaults to the heatmap tab, with a front/back toggle and a tappable body diagram", async () => {
+  it("defaults to the heatmap tab, with a tappable radar chart covering every muscle group", async () => {
     const db = new GymDatabase(uniqueDbName());
     render(<ProgressScreen />, { wrapper: withDatabase(db) });
 
     expect(await screen.findByText("Level 1")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Front" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: "Back" })).toHaveAttribute("aria-selected", "false");
-    expect(screen.getByText("Tap a muscle to see when it was last trained.")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Muscle group freshness radar" })).toBeInTheDocument();
+    for (const label of ["Chest", "Back", "Shoulders", "Arms", "Core", "Legs"]) {
+      expect(screen.getByRole("button", { name: new RegExp(`^${label}: not trained yet$`) })).toBeInTheDocument();
+    }
+    expect(screen.getByText("Tap a point to see when that group was last trained.")).toBeInTheDocument();
     db.close();
   });
 
@@ -63,7 +65,7 @@ describe("ProgressScreen", () => {
     db.close();
   });
 
-  it("tapping a trained muscle in the heatmap shows its freshness and last-trained day", async () => {
+  it("tapping a trained group's radar point shows its freshness and last-trained day", async () => {
     const db = new GymDatabase(uniqueDbName());
     const sessions = createSessionRepository(db);
     const sessionExercises = createSessionExerciseRepository(db);
@@ -77,9 +79,8 @@ describe("ProgressScreen", () => {
     render(<ProgressScreen />, { wrapper: withDatabase(db) });
     await screen.findByText("Level 1");
 
-    // Anchored to the start: "Chest" alone, not "Upper Chest" (a distinct
-    // muscle, also trained by bench press and also present on the front
-    // view, whose accessible name would otherwise also match unanchored).
+    // Bench press touches the Chest group's muscles, so its radar point
+    // now reports a real freshness reading instead of "not trained yet".
     const chest = await screen.findByRole("button", { name: /^Chest: \d+% fresh/ });
     await userEvent.click(chest);
 

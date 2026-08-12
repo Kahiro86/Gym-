@@ -24,29 +24,35 @@
   position: relative;
   width: 44px;
   height: 26px;
-  border-radius: 999px;
+  border-radius: var(--radius);
   background: var(--surface-raised);
-  transition: background 0.15s ease-out;
+  border: 2px solid var(--chalk-dim);
+  transition:
+    background 0.15s ease-out,
+    box-shadow 0.15s ease-out,
+    border-color 0.15s ease-out;
   flex-shrink: 0;
 }
 
 .track.on {
   background: var(--plate-green);
+  border-color: var(--plate-green);
+  box-shadow: 0 0 6px var(--plate-green);
 }
 
 .thumb {
   position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 1px;
   background: var(--chalk);
   transition: transform 0.15s ease-out;
 }
 
 .track.on .thumb {
-  transform: translateX(18px);
+  transform: translateX(20px);
 }
 
 @media (prefers-reduced-motion: reduce) {

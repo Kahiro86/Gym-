@@ -12,7 +12,9 @@
   max-height: 85vh;
   overflow-y: auto;
   background: var(--surface-raised);
-  border-radius: 20px 20px 0 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+  border-top: 2px solid var(--plate-red);
+  box-shadow: 0 0 12px var(--plate-red);
   padding: 20px calc(20px + var(--safe-right)) calc(20px + var(--safe-bottom)) calc(20px + var(--safe-left));
 }
 

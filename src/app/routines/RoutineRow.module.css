@@ -3,7 +3,7 @@
   align-items: center;
   gap: 8px;
   min-height: var(--tap-target-min);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--surface-raised);
 }
 

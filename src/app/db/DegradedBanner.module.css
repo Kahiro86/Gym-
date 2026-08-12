@@ -1,9 +1,13 @@
 .banner {
   padding: 10px calc(12px + var(--safe-right)) 10px calc(12px + var(--safe-left));
-  /* -bg, not the base red: chalk text fails WCAG AA at this 13px size
-     against the base color (spec §14 task 19). */
-  background: var(--plate-red-bg);
+  /* Dedicated --danger tokens, not --plate-red — that token is the
+     primary/accent teal in the retro-arcade palette now, and a storage
+     warning needs to keep reading as "something's wrong", not as a
+     positive action. -bg (not the base): chalk text fails WCAG AA at
+     this 13px size against the base color (spec §14 task 19). */
+  background: var(--danger-bg);
   color: var(--chalk);
-  font-size: 13px;
+  font-family: var(--font-body);
+  font-size: 16px;
   text-align: center;
 }

@@ -7,8 +7,8 @@
 .button {
   min-width: var(--tap-target-min);
   min-height: var(--tap-target-min);
-  border-radius: 12px;
-  border: none;
+  border-radius: var(--radius);
+  border: 2px solid var(--chalk-dim);
   background: var(--surface-raised);
   color: var(--chalk);
   font-size: 24px;
@@ -44,8 +44,8 @@
   font-size: 28px;
   font-variant-numeric: tabular-nums;
   background: var(--surface);
-  border: 1px solid var(--plate-blue);
-  border-radius: 8px;
+  border: 2px solid var(--plate-blue);
+  border-radius: var(--radius);
   color: var(--chalk);
 }
 
