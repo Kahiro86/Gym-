@@ -4,3 +4,12 @@
   gap: 16px;
   padding: 16px calc(16px + var(--safe-right)) calc(16px + var(--safe-bottom)) calc(16px + var(--safe-left));
 }
+
+.tabToggle {
+  display: flex;
+  gap: 8px;
+}
+
+.tabButton {
+  flex: 1;
+}

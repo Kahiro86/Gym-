@@ -1,0 +1,56 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.viewToggle {
+  display: flex;
+  gap: 8px;
+}
+
+.viewButton {
+  flex: 1;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.legendLabel {
+  font-size: 12px;
+  color: var(--chalk-dim);
+}
+
+.legendBar {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, #2a2724, #1e6fbf, #e8b317, #d4342a);
+}
+
+.detail {
+  background: var(--surface-raised);
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 48px;
+  justify-content: center;
+}
+
+.detailName {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--chalk);
+}
+
+.detailMeta {
+  font-size: 13px;
+  color: var(--chalk-dim);
+}
