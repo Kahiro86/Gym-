@@ -13,6 +13,11 @@ export interface ToastOptions {
 
 export interface ToastContextValue {
   showToast(options: ToastOptions): void;
+  // Logs the error for diagnostics and surfaces a user-visible toast
+  // (spec §14 task 18) — the one place every "Task 18 owns real
+  // error-surfacing UI" catch block across the app funnels into, instead
+  // of a silent console.error with nothing shown to the user.
+  reportError(err: unknown, fallbackMessage: string): void;
 }
 
 export const ToastContext = createContext<ToastContextValue | null>(null);

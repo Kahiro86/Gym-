@@ -16,7 +16,7 @@ import type { RoutineRecord } from "../../storage/types.js";
 export function RoutinesSection() {
   const navigate = useNavigate();
   const routines = useRoutines();
-  const { showToast } = useToast();
+  const { showToast, reportError } = useToast();
   const [sheetOpen, setSheetOpen] = useState(false);
 
   async function handleCreate(name: string) {
@@ -43,7 +43,7 @@ export function RoutinesSection() {
         },
       });
     } catch (err) {
-      console.error("Failed to delete routine", err);
+      reportError(err, "Failed to delete routine");
     }
   }
 

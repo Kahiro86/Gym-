@@ -3,12 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { useSession } from "../hooks/useSession.js";
 import { Button } from "../ui/Button.js";
 import { Card } from "../ui/Card.js";
+import { useToast } from "../ui/ToastContext.js";
 import { StartSheet } from "../start/StartSheet.js";
 import styles from "./StartScreen.module.css";
 
 export function StartScreen() {
   const navigate = useNavigate();
   const session = useSession();
+  const { reportError } = useToast();
   const [sheetOpen, setSheetOpen] = useState(false);
 
   if (session.loading) return null;
@@ -25,7 +27,7 @@ export function StartScreen() {
       await session.resume(active.session.id);
       navigate("/session");
     } catch (err) {
-      console.error("Failed to resume session", err);
+      reportError(err, "Failed to resume session");
     }
   }
 
@@ -34,7 +36,7 @@ export function StartScreen() {
     try {
       await session.discard(active.session.id);
     } catch (err) {
-      console.error("Failed to discard session", err);
+      reportError(err, "Failed to discard session");
     }
   }
 

@@ -5,6 +5,7 @@ import { useDeviceSettings } from "../hooks/useDeviceSettings.js";
 import { useActiveSessionStore } from "../store/activeSessionStore.js";
 import { Stepper } from "../ui/Stepper.js";
 import { Button } from "../ui/Button.js";
+import { useToast } from "../ui/ToastContext.js";
 import styles from "./LogSetForm.module.css";
 import type { LoadType } from "../../domain/types.js";
 import type { NewSet } from "../../storage/repositories/setRepository.js";
@@ -58,6 +59,7 @@ export function LogSetForm({ sessionExerciseId, exerciseId, defaultReps, default
   const { bodyweightKg } = useCurrentBodyweight();
   const { deviceSettings } = useDeviceSettings();
   const startRest = useActiveSessionStore((s) => s.startRest);
+  const { reportError } = useToast();
 
   const [weightKg, setWeightKg] = useState(defaultWeightKg ?? DEFAULT_WEIGHT_KG);
   const [reps, setReps] = useState(defaultReps ?? DEFAULT_REPS);
@@ -92,9 +94,7 @@ export function LogSetForm({ sessionExerciseId, exerciseId, defaultReps, default
       setIsWarmup(false);
       onLogged?.();
     } catch (err) {
-      // Task 18 owns real error-surfacing UI (e.g. storage evicted
-      // mid-write) — for now, just don't leave this unhandled.
-      console.error("Failed to log set", err);
+      reportError(err, "Failed to log set");
     } finally {
       setSaving(false);
     }

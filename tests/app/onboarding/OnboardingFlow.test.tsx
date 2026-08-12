@@ -6,13 +6,19 @@ import { GymDatabase } from "../../../src/storage/db.js";
 import { createSettingsRepository } from "../../../src/storage/repositories/settingsRepository.js";
 import { createBodyweightRepository } from "../../../src/storage/repositories/bodyweightRepository.js";
 import { OnboardingFlow } from "../../../src/app/onboarding/OnboardingFlow.js";
+import { ToastProvider } from "../../../src/app/ui/ToastProvider.js";
 import { uniqueDbName, withDatabase } from "../testDb.js";
 
 describe("OnboardingFlow", () => {
   it("walks through all three questions and persists the chosen answers on Finish", async () => {
     const db = new GymDatabase(uniqueDbName());
     const onDone = vi.fn().mockResolvedValue(undefined);
-    render(<OnboardingFlow onDone={onDone} />, { wrapper: withDatabase(db) });
+    render(
+      <ToastProvider>
+        <OnboardingFlow onDone={onDone} />
+      </ToastProvider>,
+      { wrapper: withDatabase(db) }
+    );
 
     // Step 1: units.
     expect(screen.getByText(/units do you train in/i)).toBeInTheDocument();
@@ -44,7 +50,12 @@ describe("OnboardingFlow", () => {
   it("Skip commits immediately without writing a bodyweight entry or a weekly target", async () => {
     const db = new GymDatabase(uniqueDbName());
     const onDone = vi.fn().mockResolvedValue(undefined);
-    render(<OnboardingFlow onDone={onDone} />, { wrapper: withDatabase(db) });
+    render(
+      <ToastProvider>
+        <OnboardingFlow onDone={onDone} />
+      </ToastProvider>,
+      { wrapper: withDatabase(db) }
+    );
 
     await userEvent.click(screen.getByRole("button", { name: "Skip" }));
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
@@ -58,7 +69,12 @@ describe("OnboardingFlow", () => {
   it("Skip from a later step still skips the whole flow rather than just the current question", async () => {
     const db = new GymDatabase(uniqueDbName());
     const onDone = vi.fn().mockResolvedValue(undefined);
-    render(<OnboardingFlow onDone={onDone} />, { wrapper: withDatabase(db) });
+    render(
+      <ToastProvider>
+        <OnboardingFlow onDone={onDone} />
+      </ToastProvider>,
+      { wrapper: withDatabase(db) }
+    );
 
     await userEvent.click(screen.getByRole("button", { name: "Next" })); // -> bodyweight step
     await userEvent.click(screen.getByRole("button", { name: "Skip" }));

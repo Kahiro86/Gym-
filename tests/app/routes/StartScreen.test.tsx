@@ -6,15 +6,18 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { GymDatabase } from "../../../src/storage/db.js";
 import { createSessionRepository } from "../../../src/storage/repositories/sessionRepository.js";
 import { StartScreen } from "../../../src/app/routes/StartScreen.js";
+import { ToastProvider } from "../../../src/app/ui/ToastProvider.js";
 import { uniqueDbName, withDatabase } from "../testDb.js";
 
 function renderStartScreen(db: GymDatabase) {
   return render(
     <MemoryRouter initialEntries={["/start"]}>
-      <Routes>
-        <Route path="/start" element={<StartScreen />} />
-        <Route path="/session" element={<div>SESSION SCREEN</div>} />
-      </Routes>
+      <ToastProvider>
+        <Routes>
+          <Route path="/start" element={<StartScreen />} />
+          <Route path="/session" element={<div>SESSION SCREEN</div>} />
+        </Routes>
+      </ToastProvider>
     </MemoryRouter>,
     { wrapper: withDatabase(db) }
   );

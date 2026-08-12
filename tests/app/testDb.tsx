@@ -8,8 +8,8 @@ export function uniqueDbName(): string {
 
 // Bypasses <DatabaseProvider>'s async openDatabaseSafely() dance so hook
 // tests can supply an already-open, uniquely-named GymDatabase directly.
-export function withDatabase(db: GymDatabase) {
+export function withDatabase(db: GymDatabase, degraded = false) {
   return function Wrapper({ children }: { children: ReactNode }) {
-    return <DatabaseContext.Provider value={{ db, degraded: false }}>{children}</DatabaseContext.Provider>;
+    return <DatabaseContext.Provider value={{ db, degraded }}>{children}</DatabaseContext.Provider>;
   };
 }

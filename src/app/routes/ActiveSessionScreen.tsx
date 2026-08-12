@@ -58,7 +58,7 @@ function SessionContent({ sessionId, finish }: SessionContentProps) {
   const sessionExercises = useSessionExercises(sessionId);
   const sessionXp = useSessionXp(sessionId);
   const stopRest = useActiveSessionStore((s) => s.stopRest);
-  const { showToast } = useToast();
+  const { showToast, reportError } = useToast();
   const [sheet, setSheet] = useState<SheetState>(null);
   // §2: the screen must not sleep for the whole duration of a workout,
   // not just while the rest timer happens to be running.
@@ -100,9 +100,7 @@ function SessionContent({ sessionId, finish }: SessionContentProps) {
         navigate("/today");
       }
     } catch (err) {
-      // Task 18 owns real error-surfacing UI — for now, just don't leave
-      // this unhandled.
-      console.error("Failed to finish session", err);
+      reportError(err, "Failed to finish session");
     }
   }
 
@@ -130,7 +128,7 @@ function SessionContent({ sessionId, finish }: SessionContentProps) {
         },
       });
     } catch (err) {
-      console.error("Failed to skip exercise", err);
+      reportError(err, "Failed to skip exercise");
     }
   }
 
@@ -145,7 +143,7 @@ function SessionContent({ sessionId, finish }: SessionContentProps) {
       }
       sessionXp.refresh();
     } catch (err) {
-      console.error("Failed to update session exercises", err);
+      reportError(err, "Failed to update session exercises");
     }
   }
 

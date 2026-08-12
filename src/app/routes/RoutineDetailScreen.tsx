@@ -21,7 +21,7 @@ export function RoutineDetailScreen() {
   const navigate = useNavigate();
   const routines = useRoutines();
   const routineExercises = useRoutineExercises(id ?? null);
-  const { showToast } = useToast();
+  const { showToast, reportError } = useToast();
   const [sheetOpen, setSheetOpen] = useState(false);
 
   if (routines.loading) return null;
@@ -34,7 +34,7 @@ export function RoutineDetailScreen() {
     try {
       await routineExercises.add({ routineId: routine!.id, exerciseId });
     } catch (err) {
-      console.error("Failed to add exercise to routine", err);
+      reportError(err, "Failed to add exercise to routine");
     }
   }
 
@@ -59,7 +59,7 @@ export function RoutineDetailScreen() {
         },
       });
     } catch (err) {
-      console.error("Failed to remove exercise from routine", err);
+      reportError(err, "Failed to remove exercise from routine");
     }
   }
 

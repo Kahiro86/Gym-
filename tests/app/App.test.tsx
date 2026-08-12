@@ -15,7 +15,7 @@ import { uniqueDbName, withDatabase } from "./testDb.js";
 // deliberately doesn't include it (see App.tsx's own comment on staying
 // router/provider-light for testability), but several routed screens
 // (e.g. /more, /session) call useToast() and would crash without it.
-async function renderOnboardedApp(path: string) {
+async function renderOnboardedApp(path: string, degraded = false) {
   const db = new GymDatabase(uniqueDbName());
   await createDeviceSettingsRepository(db).update({ onboardingCompleted: true });
   render(
@@ -24,7 +24,7 @@ async function renderOnboardedApp(path: string) {
         <App />
       </ToastProvider>
     </MemoryRouter>,
-    { wrapper: withDatabase(db) }
+    { wrapper: withDatabase(db, degraded) }
   );
   return db;
 }
@@ -62,11 +62,20 @@ describe("App", () => {
     db.close();
   });
 
+  it("shows the degraded-storage banner alongside the tab shell when storage is degraded", async () => {
+    const db = await renderOnboardedApp("/today", true);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument());
+    expect(screen.getByRole("alert")).toHaveTextContent(/nothing you log will be saved/i);
+    db.close();
+  });
+
   it("shows onboarding instead of the tab shell on a fresh device", async () => {
     const db = new GymDatabase(uniqueDbName());
     render(
       <MemoryRouter initialEntries={["/today"]}>
-        <App />
+        <ToastProvider>
+          <App />
+        </ToastProvider>
       </MemoryRouter>,
       { wrapper: withDatabase(db) }
     );

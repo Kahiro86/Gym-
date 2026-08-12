@@ -22,6 +22,37 @@ function TriggerButton({ withAction, onAction }: { withAction?: boolean; onActio
   );
 }
 
+function ReportErrorButton({ err, message }: { err: unknown; message: string }) {
+  const { reportError } = useToast();
+  return (
+    <button type="button" onClick={() => reportError(err, message)}>
+      Do the thing
+    </button>
+  );
+}
+
+function AsyncFailingActionButton() {
+  const { showToast } = useToast();
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        showToast({
+          message: "Set deleted",
+          action: {
+            label: "Undo",
+            onAction: async () => {
+              throw new Error("undo failed");
+            },
+          },
+        })
+      }
+    >
+      Delete set
+    </button>
+  );
+}
+
 describe("ToastProvider / useToast", () => {
   it("shows nothing until showToast is called", () => {
     render(
@@ -106,5 +137,37 @@ describe("ToastProvider / useToast", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("reportError shows the fallback message for a generic error", async () => {
+    render(
+      <ToastProvider>
+        <ReportErrorButton err={new Error("boom")} message="Failed to log set" />
+      </ToastProvider>
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Do the thing" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Failed to log set");
+  });
+
+  it("reportError shows a storage-full message for a QuotaExceededError", async () => {
+    render(
+      <ToastProvider>
+        <ReportErrorButton err={new DOMException("full", "QuotaExceededError")} message="Failed to log set" />
+      </ToastProvider>
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Do the thing" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Storage is full");
+  });
+
+  it("surfaces a toast when an async action's onAction rejects, instead of an unhandled rejection", async () => {
+    render(
+      <ToastProvider>
+        <AsyncFailingActionButton />
+      </ToastProvider>
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Delete set" }));
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Action failed");
   });
 });

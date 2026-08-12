@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Sheet } from "../ui/Sheet.js";
 import { Button } from "../ui/Button.js";
+import { useToast } from "../ui/ToastContext.js";
 import styles from "./NewRoutineSheet.module.css";
 
 export interface NewRoutineSheetProps {
@@ -15,6 +16,7 @@ export interface NewRoutineSheetProps {
 // use (a session starts with no exercises either).
 export function NewRoutineSheet({ open, onClose, onCreate }: NewRoutineSheetProps) {
   const [name, setName] = useState("");
+  const { reportError } = useToast();
 
   useEffect(() => {
     if (!open) setName("");
@@ -26,7 +28,7 @@ export function NewRoutineSheet({ open, onClose, onCreate }: NewRoutineSheetProp
     try {
       await onCreate(trimmed);
     } catch (err) {
-      console.error("Failed to create routine", err);
+      reportError(err, "Failed to create routine");
     }
   }
 

@@ -5,6 +5,7 @@ import { Sheet } from "../ui/Sheet.js";
 import { ListRow } from "../ui/ListRow.js";
 import { Button } from "../ui/Button.js";
 import { EmptyState } from "../ui/EmptyState.js";
+import { useToast } from "../ui/ToastContext.js";
 import styles from "./StartSheet.module.css";
 
 export interface StartSheetProps {
@@ -19,17 +20,16 @@ export interface StartSheetProps {
 export function StartSheet({ open, onClose, onStarted }: StartSheetProps) {
   const session = useSession();
   const routines = useRoutines();
+  const { reportError } = useToast();
 
   const startFree = useCallback(async () => {
     try {
       await session.start(Date.now());
       onStarted();
     } catch (err) {
-      // Task 18 owns real error-surfacing UI — for now, just don't leave
-      // this unhandled.
-      console.error("Failed to start a session", err);
+      reportError(err, "Failed to start a session");
     }
-  }, [session, onStarted]);
+  }, [session, onStarted, reportError]);
 
   const startFromRoutine = useCallback(
     async (routineId: string) => {
@@ -37,10 +37,10 @@ export function StartSheet({ open, onClose, onStarted }: StartSheetProps) {
         await session.start(Date.now(), { routineId });
         onStarted();
       } catch (err) {
-        console.error("Failed to start a session from routine", err);
+        reportError(err, "Failed to start a session");
       }
     },
-    [session, onStarted]
+    [session, onStarted, reportError]
   );
 
   return (

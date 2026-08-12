@@ -24,12 +24,17 @@ export interface SetListProps {
 // re-logs an equivalent new set rather than literally reviving the old
 // one; from the user's perspective the effect is identical.
 export function SetList({ sets, remove, log, onChange }: SetListProps) {
-  const { showToast } = useToast();
+  const { showToast, reportError } = useToast();
 
   if (sets.length === 0) return null;
 
   async function handleDelete(set: SetRecord) {
-    await remove(set.id);
+    try {
+      await remove(set.id);
+    } catch (err) {
+      reportError(err, "Failed to delete set");
+      return;
+    }
     onChange?.();
     showToast({
       message: "Set deleted",

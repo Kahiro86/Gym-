@@ -4,6 +4,7 @@ import { createBodyweightRepository } from "../../storage/repositories/bodyweigh
 import { useDatabase } from "../db/context.js";
 import { Button } from "../ui/Button.js";
 import { Stepper } from "../ui/Stepper.js";
+import { useToast } from "../ui/ToastContext.js";
 import styles from "./OnboardingFlow.module.css";
 import type { Units } from "../../storage/types.js";
 
@@ -28,6 +29,7 @@ const DEFAULT_WEEKLY_TARGET = 3;
 // stays canonically kg, per validateBodyweightKg).
 export function OnboardingFlow({ onDone }: OnboardingFlowProps) {
   const { db } = useDatabase();
+  const { reportError } = useToast();
   const [stepIndex, setStepIndex] = useState(0);
   const [units, setUnits] = useState<Units>("kg");
   const [bodyweightKg, setBodyweightKg] = useState(DEFAULT_BODYWEIGHT_KG);
@@ -46,9 +48,7 @@ export function OnboardingFlow({ onDone }: OnboardingFlowProps) {
       }
       await onDone();
     } catch (err) {
-      // Task 18 owns real error-surfacing UI — for now, just don't leave
-      // this unhandled.
-      console.error("Failed to complete onboarding", err);
+      reportError(err, "Failed to save your answers");
     } finally {
       setSaving(false);
     }

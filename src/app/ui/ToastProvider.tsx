@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { describeError } from "../errorMessage.js";
 import { ToastContext, type ToastOptions } from "./ToastContext.js";
 import styles from "./Toast.module.css";
 
@@ -32,8 +33,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }, options.durationMs ?? DEFAULT_DURATION_MS);
   }, []);
 
+  const reportError = useCallback(
+    (err: unknown, fallbackMessage: string) => {
+      console.error(fallbackMessage, err);
+      showToast({ message: describeError(err, fallbackMessage) });
+    },
+    [showToast]
+  );
+
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={{ showToast, reportError }}>
       {children}
       {toast && (
         <div className={styles.toast} role="status" aria-live="polite">
@@ -43,7 +52,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               type="button"
               className={styles.action}
               onClick={() => {
-                toast.action!.onAction();
+                // Several call sites pass an async action (e.g. undoing a
+                // delete) — its onAction type is void-returning, but TS
+                // allows a Promise-returning function to satisfy that, so
+                // this has to explicitly catch a rejection rather than
+                // let it become an unhandled one (spec §14 task 18).
+                Promise.resolve(toast.action!.onAction()).catch((err) => reportError(err, "Action failed"));
                 dismiss();
               }}
             >

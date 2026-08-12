@@ -10,6 +10,7 @@ import { createDeviceSettingsRepository } from "../../../src/storage/repositorie
 import { useSets } from "../../../src/app/hooks/useSets.js";
 import { useActiveSessionStore } from "../../../src/app/store/activeSessionStore.js";
 import { LogSetForm } from "../../../src/app/session/LogSetForm.js";
+import { ToastProvider } from "../../../src/app/ui/ToastProvider.js";
 import { uniqueDbName, withDatabase } from "../testDb.js";
 import type { LogSetFormProps } from "../../../src/app/session/LogSetForm.js";
 
@@ -24,7 +25,11 @@ async function seedSessionExercise(db: GymDatabase, exerciseId: string) {
 // in a configuration it's never actually rendered in.
 function Harness(props: Omit<LogSetFormProps, "log">) {
   const { log } = useSets(props.sessionExerciseId);
-  return <LogSetForm {...props} log={log} />;
+  return (
+    <ToastProvider>
+      <LogSetForm {...props} log={log} />
+    </ToastProvider>
+  );
 }
 
 describe("LogSetForm", () => {
