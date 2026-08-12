@@ -23,7 +23,9 @@
 .action {
   background: none;
   border: none;
-  color: var(--plate-blue);
+  /* -light, not the base blue: this is text on --surface-raised, and
+     the base blue only measures ~2.9:1 there (spec §14 task 19). */
+  color: var(--plate-blue-light);
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;

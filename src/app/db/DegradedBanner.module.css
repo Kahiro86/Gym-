@@ -1,6 +1,8 @@
 .banner {
   padding: 10px calc(12px + var(--safe-right)) 10px calc(12px + var(--safe-left));
-  background: var(--plate-red);
+  /* -bg, not the base red: chalk text fails WCAG AA at this 13px size
+     against the base color (spec §14 task 19). */
+  background: var(--plate-red-bg);
   color: var(--chalk);
   font-size: 13px;
   text-align: center;

@@ -26,7 +26,9 @@
 .prBadge {
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--plate-red);
+  /* -bg, not the base red: chalk text fails WCAG AA at this 12px badge
+     size against the base color (spec §14 task 19). */
+  background: var(--plate-red-bg);
   color: var(--chalk);
   font-size: 12px;
   font-weight: 600;

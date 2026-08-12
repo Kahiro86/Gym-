@@ -14,6 +14,22 @@
   --plate-yellow: #e8b317; /* 15kg — XP */
   --plate-green: #2e8b4f; /* 10kg — completion */
 
+  /* Accessibility pass (spec §14 task 19): the base plate colors read
+     fine as large/bold text or decorative fills, but chalk-on-plate at
+     badge/banner text sizes (12-14px) falls short of WCAG AA's 4.5:1 —
+     e.g. chalk-on-plate-red measures ~4.2:1. Darkened -bg variants exist
+     for exactly that "small text over a filled plate-color background"
+     case; the base tokens are unchanged for every other existing use
+     (large text, decorative fills, plate-color-as-foreground-on-surface,
+     all of which already clear their own applicable WCAG threshold).
+     plate-blue-light is the mirror case: text needs to be *lighter* than
+     the base blue to read against a dark surface (Toast's action label). */
+  --plate-red-bg: #aa2a22;
+  --plate-blue-bg: #1a5ea2;
+  --plate-green-bg: #1c532f;
+  --plate-blue-light: #5693cf;
+  --plate-red-light: #df675f;
+
   /* Typography. */
   --font-display: "Barlow Condensed", sans-serif;
   --font-body: "IBM Plex Sans", sans-serif;

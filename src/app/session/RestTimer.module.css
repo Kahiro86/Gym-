@@ -21,3 +21,12 @@
   display: flex;
   gap: var(--tap-target-gap);
 }
+
+/* Button's ghost variant uses chalk-dim, tuned for the app's default
+   dark surfaces — nested on this bar's plate-blue background instead, it
+   measures ~1.7:1, badly failing WCAG AA (spec §14 task 19). Two classes
+   (not one) so this reliably beats .ghost's own single-class specificity
+   regardless of CSS module import order. */
+.actions .skipButton {
+  color: var(--chalk);
+}

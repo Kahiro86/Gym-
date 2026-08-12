@@ -51,7 +51,7 @@ export function RestTimer() {
         <Button size="compact" variant="secondary" onClick={() => addRestSeconds(ADD_SECONDS_STEP)}>
           +{ADD_SECONDS_STEP}s
         </Button>
-        <Button size="compact" variant="ghost" onClick={stopRest}>
+        <Button size="compact" variant="ghost" className={styles.skipButton} onClick={stopRest}>
           Skip
         </Button>
       </div>

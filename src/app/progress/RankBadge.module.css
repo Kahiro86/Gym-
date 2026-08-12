@@ -1,3 +1,6 @@
+/* E/D/C/S use the darkened -bg plate-color variants, not the base
+   tokens — chalk text at this badge's 13px fails WCAG AA against the
+   base colors (spec §14 task 19); tokens.css explains why. */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -22,15 +25,15 @@
 }
 
 .E {
-  background: var(--plate-green);
+  background: var(--plate-green-bg);
 }
 
 .D {
-  background: var(--plate-blue);
+  background: var(--plate-blue-bg);
 }
 
 .C {
-  background: var(--plate-blue);
+  background: var(--plate-blue-bg);
 }
 
 .B {
@@ -44,5 +47,5 @@
 }
 
 .S {
-  background: var(--plate-red);
+  background: var(--plate-red-bg);
 }

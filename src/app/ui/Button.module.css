@@ -27,7 +27,9 @@
 }
 
 .primary {
-  background: var(--plate-red);
+  /* -bg, not the base red: chalk-on-plate-red is ~4.2:1, short of AA's
+     4.5:1 at this button's 15px text (spec §14 task 19). */
+  background: var(--plate-red-bg);
   color: var(--chalk);
 }
 
@@ -39,8 +41,10 @@
 
 .danger {
   background: transparent;
-  color: var(--plate-red);
-  border: 1px solid var(--plate-red);
+  /* -light, not -bg: this is text directly on the dark surface, the
+     opposite direction from .primary's filled background above. */
+  color: var(--plate-red-light);
+  border: 1px solid var(--plate-red-light);
 }
 
 .ghost {

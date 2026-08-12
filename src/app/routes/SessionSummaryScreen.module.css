@@ -10,7 +10,11 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  background: var(--plate-green);
+  /* -bg, not the base green: chalk text fails WCAG AA at .levelUpLabel's
+     14px size against the base color (spec §14 task 19) — .levelUpValue's
+     28px would clear the base color fine on its own, but both text
+     elements share this one background. */
+  background: var(--plate-green-bg);
   animation: level-up-in 0.4s ease-out;
 }
 
