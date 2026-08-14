@@ -13,11 +13,16 @@
     "test:layer2": "node tests/acceptance/layer2.mjs"
   },
   "devDependencies": {
+    "@types/react": "18.3.18",
+    "@types/react-dom": "18.3.5",
+    "@vitejs/plugin-react": "4.3.4",
     "typescript": "5.7.3",
     "vite": "5.4.21",
     "vitest": "2.1.9"
   },
   "dependencies": {
-    "@sqlite.org/sqlite-wasm": "3.51.2-build9"
+    "@sqlite.org/sqlite-wasm": "3.51.2-build9",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   }
 }

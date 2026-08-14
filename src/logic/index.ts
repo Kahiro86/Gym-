@@ -17,6 +17,8 @@ export type {
   StreakRun, TrendPoint, HistoryBucket, HeatmapDay, ScoreColor, EntryMap, DateSpan,
 } from "./core.js";
 export type { Period } from "./period.js";
+export { getListView, listDays, buildListView, DEFAULT_LIST_DAYS } from "./listView.js";
+export type { ListView, ListGroup, ListRow, ListCell, CellState } from "./listView.js";
 
 interface Loaded {
   habit: Habit;

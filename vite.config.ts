@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
 // COOP/COEP are required for the "opfs" SQLite VFS (it bridges to a second
 // worker via SharedArrayBuffer, which only exists in a cross-origin-isolated
@@ -11,6 +12,7 @@ const coopCoep = {
 };
 
 export default defineConfig({
+  plugins: [react()],
   server: { headers: coopCoep },
   preview: { headers: coopCoep },
   optimizeDeps: { exclude: ["@sqlite.org/sqlite-wasm"] },

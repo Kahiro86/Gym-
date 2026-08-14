@@ -1,0 +1,195 @@
+/* Screen 1 — Loop's flat table. Deliberately NOT cards: no per-row
+   background, no gaps, no rounded row corners. The only separation
+   between habits is a hairline divider. */
+
+.screen {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 14px 16px 40px;
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 2px 12px;
+}
+
+.topbar__title {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.topbar__action {
+  display: flex;
+  align-items: center;
+  color: var(--accent-gold);
+  padding: 4px;
+}
+
+/* ── Column header ───────────────────────────────────────────────── */
+.grid {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(var(--day-count, 5), 0.62fr);
+  align-items: center;
+}
+
+.colheader {
+  align-items: end;
+  padding: 0 2px 6px;
+  border-bottom: 0.5px solid var(--border);
+}
+
+.colheader__day {
+  text-align: center;
+  font-size: 9px;
+  letter-spacing: 0.3px;
+  color: var(--text-secondary);
+}
+
+.colheader__date {
+  display: block;
+  font-size: 10px;
+  color: var(--text-primary);
+}
+
+/* Today's column label carries the accent so the tappable column is
+   identifiable without adding a background fill. */
+.colheader__day--today .colheader__date { color: var(--accent-gold); }
+
+/* ── Routine group headers ───────────────────────────────────────── */
+.group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 9px 2px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--accent-gold);
+  text-align: left;
+}
+
+.group--loose { color: var(--text-secondary); }
+
+/* ── Habit rows ──────────────────────────────────────────────────── */
+/* 38px, inside Loop's 36-40px band. */
+.row {
+  min-height: 38px;
+  padding: 6px 2px;
+  border-bottom: 0.5px solid var(--border);
+}
+
+.row:last-child { border-bottom: none; }
+
+.row__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: left;
+  padding: 2px 0;
+}
+
+.row__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row__icon { flex-shrink: 0; }
+
+/* ── Cells: icons and text only. No fills, no tiles. ─────────────── */
+.cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  width: 100%;
+}
+
+.cell--complete { color: var(--accent-gold); }
+.cell--missed { color: var(--text-secondary); }
+
+.cell__ring {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent-gold);
+}
+
+.cell__value {
+  font-size: 11px;
+  color: var(--text-primary);
+}
+
+.cell__unit {
+  font-size: 9px;
+  color: var(--text-secondary);
+  margin-left: 2px;
+}
+
+/* A day the habit is not due. Dimmed rather than removed, so the grid
+   still reads as a grid. */
+.cell--off { opacity: 0.25; }
+
+.cell__off-mark {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+}
+
+/* ── Skeleton, empty and error states ────────────────────────────── */
+.skeleton__bar {
+  height: 9px;
+  border-radius: 3px;
+  background: var(--cell-empty);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.notice {
+  margin-top: 8px;
+  padding: 22px 18px;
+  border: 0.5px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-card);
+  text-align: center;
+}
+
+.notice__title {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.notice__body {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.notice--error { border-color: var(--danger-red); }
+.notice--error .notice__title { color: var(--danger-red); }
+
+.notice__detail {
+  margin-top: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  text-align: left;
+  word-break: break-word;
+}
