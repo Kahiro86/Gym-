@@ -104,8 +104,6 @@
   white-space: nowrap;
 }
 
-.row__icon { flex-shrink: 0; }
-
 /* ── Cells: icons and text only. No fills, no tiles. ─────────────── */
 .cell {
   display: flex;

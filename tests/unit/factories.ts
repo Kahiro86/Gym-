@@ -3,6 +3,7 @@
 // arithmetic separate from the fetching.
 import type { Habit, Entry, HabitType, FrequencyType, TargetDirection } from "../../src/db/types.js";
 import { toEntryMap, type EntryMap } from "../../src/logic/core.js";
+import { habitCreatedDate } from "../../src/logic/period.js";
 import { dateRange } from "../../src/logic/dates.js";
 
 /**
@@ -57,4 +58,10 @@ export function entriesFrom(values: Record<string, number>): EntryMap {
 /** Every day in [start, end] set to `value`. */
 export function entriesForRange(start: string, end: string, value = 1): EntryMap {
   return toEntryMap(dateRange(start, end).map((d) => makeEntry(d, value)));
+}
+
+/** The habit's creation date — the default scoring start when there is
+    no older backfilled entry. */
+export function startOf(habit: Habit): string {
+  return habitCreatedDate(habit);
 }

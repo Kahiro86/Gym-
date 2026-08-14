@@ -19,7 +19,7 @@ import {
 } from "./dates.js";
 import { isScheduled, countScheduledDays } from "./schedule.js";
 import { isCompleted } from "./completion.js";
-import { resolvePeriodRange, habitStartDate, type Period } from "./period.js";
+import { resolvePeriodRange, type Period } from "./period.js";
 
 /** date → entry, the shape every compute function reads. */
 export type EntryMap = ReadonlyMap<string, Entry>;
@@ -86,8 +86,8 @@ export const SCORE_COLOR_HEX: Record<ScoreColor, string> = {
   "danger-red": "#E05252",
 };
 
-export function spanForPeriod(habit: Habit, today: string, period: Period): DateSpan {
-  return resolvePeriodRange(period, today, habit);
+export function spanForPeriod(start: string, today: string, period: Period): DateSpan {
+  return resolvePeriodRange(period, today, start);
 }
 
 // ── Streaks ───────────────────────────────────────────────────────────
@@ -119,8 +119,8 @@ export function computeStreakRuns(habit: Habit, entries: EntryMap, start: string
   return runs;
 }
 
-export function spanForStreaks(habit: Habit, today: string): DateSpan {
-  return { start: habitStartDate(habit), end: today };
+export function spanForStreaks(start: string, today: string): DateSpan {
+  return { start, end: today };
 }
 
 /**
@@ -146,14 +146,13 @@ function previousScheduledDay(habit: Habit, today: string, created: string): str
  * Today being scheduled but not yet logged does not break the streak
  * either — the day is not over. It just does not add to it until logged.
  */
-export function computeCurrentStreak(habit: Habit, entries: EntryMap, today: string): number {
-  const created = habitStartDate(habit);
-  if (today < created) return 0;
+export function computeCurrentStreak(habit: Habit, start: string, entries: EntryMap, today: string): number {
+  if (today < start) return 0;
 
   let priorStreak = 0;
-  const lastDue = previousScheduledDay(habit, today, created);
+  const lastDue = previousScheduledDay(habit, today, start);
   if (lastDue) {
-    const runs = computeStreakRuns(habit, entries, created, lastDue);
+    const runs = computeStreakRuns(habit, entries, start, lastDue);
     const last = runs[runs.length - 1];
     if (last && last.endDate === lastDue) priorStreak = last.length;
   }
@@ -163,10 +162,9 @@ export function computeCurrentStreak(habit: Habit, entries: EntryMap, today: str
 }
 
 /** Longest first; ties broken by earlier start so ordering is stable. */
-export function computeBestStreaks(habit: Habit, entries: EntryMap, today: string, limit: number): StreakRun[] {
-  const created = habitStartDate(habit);
-  if (today < created || limit <= 0) return [];
-  return computeStreakRuns(habit, entries, created, today)
+export function computeBestStreaks(habit: Habit, start: string, entries: EntryMap, today: string, limit: number): StreakRun[] {
+  if (today < start || limit <= 0) return [];
+  return computeStreakRuns(habit, entries, start, today)
     .sort((a, b) => b.length - a.length || (a.startDate < b.startDate ? -1 : 1))
     .slice(0, limit);
 }
@@ -177,18 +175,17 @@ export function computeBestStreaks(habit: Habit, entries: EntryMap, today: strin
  * The dates each trend point lands on. Daily resolution for week/month,
  * monthly for year/all, so the series stays readable at any zoom.
  */
-function trendPointDates(habit: Habit, today: string, period: Period): string[] {
-  const created = habitStartDate(habit);
-  if (today < created) return [];
+function trendPointDates(start: string, today: string, period: Period): string[] {
+  if (today < start) return [];
 
   if (period === "week" || period === "month") {
-    const span = resolvePeriodRange(period, today, habit);
+    const span = resolvePeriodRange(period, today, start);
     return dateRange(span.start, span.end);
   }
 
   const firstMonth = period === "year"
-    ? maxDate(monthOf(shiftMonth(monthOf(today), -(TREND_YEAR_MONTHS - 1))), monthOf(created))
-    : monthOf(created);
+    ? maxDate(monthOf(shiftMonth(monthOf(today), -(TREND_YEAR_MONTHS - 1))), monthOf(start))
+    : monthOf(start);
 
   const dates: string[] = [];
   let cursor = firstMonth;
@@ -199,13 +196,12 @@ function trendPointDates(habit: Habit, today: string, period: Period): string[] 
   return dates;
 }
 
-export function spanForTrend(habit: Habit, today: string, period: Period): DateSpan {
-  const dates = trendPointDates(habit, today, period);
-  const created = habitStartDate(habit);
-  if (!dates.length) return { start: created, end: today };
+export function spanForTrend(start: string, today: string, period: Period): DateSpan {
+  const dates = trendPointDates(start, today, period);
+  if (!dates.length) return { start, end: today };
   // Each point averages a trailing sub-window, so the earliest data
   // needed sits before the first point.
-  return { start: maxDate(addDays(dates[0], -(TREND_WINDOW_DAYS[period] - 1)), created), end: today };
+  return { start: maxDate(addDays(dates[0], -(TREND_WINDOW_DAYS[period] - 1)), start), end: today };
 }
 
 /**
@@ -217,56 +213,54 @@ export function spanForTrend(habit: Habit, today: string, period: Period): DateS
  * renders "not enough data yet" from it (spec Screen 2C), so this does
  * not invent points to pad the chart.
  */
-export function computeTrend(habit: Habit, entries: EntryMap, today: string, period: Period): TrendPoint[] {
-  const created = habitStartDate(habit);
+export function computeTrend(habit: Habit, start: string, entries: EntryMap, today: string, period: Period): TrendPoint[] {
   const window = TREND_WINDOW_DAYS[period];
-  return trendPointDates(habit, today, period).map((date) => ({
+  return trendPointDates(start, today, period).map((date) => ({
     date,
-    score: computeScore(habit, entries, maxDate(addDays(date, -(window - 1)), created), date),
+    score: computeScore(habit, entries, maxDate(addDays(date, -(window - 1)), start), date),
   }));
 }
 
 // ── History ───────────────────────────────────────────────────────────
 
 /** Calendar-aligned buckets, oldest first, clipped to the habit's life. */
-function historyBucketRanges(habit: Habit, today: string, period: "week" | "month"): DateSpan[] {
-  const created = habitStartDate(habit);
-  if (today < created) return [];
+function historyBucketRanges(start: string, today: string, period: "week" | "month"): DateSpan[] {
+  if (today < start) return [];
   const ranges: DateSpan[] = [];
 
   if (period === "week") {
     let cursor = weekStart(today);
     for (let i = 0; i < HISTORY_WEEK_BUCKETS; i++) {
       const rawEnd = addDays(cursor, 6);
-      if (rawEnd < created) break;
-      ranges.unshift({ start: maxDate(cursor, created), end: minDate(rawEnd, today) });
+      if (rawEnd < start) break;
+      ranges.unshift({ start: maxDate(cursor, start), end: minDate(rawEnd, today) });
       cursor = addDays(cursor, -7);
     }
   } else {
     let cursor = monthOf(today);
-    const createdMonth = monthOf(created);
+    const startMonth = monthOf(start);
     for (let i = 0; i < HISTORY_MONTH_BUCKETS; i++) {
-      const start = maxDate(firstOfMonth(cursor), created);
+      const bucketStart = maxDate(firstOfMonth(cursor), start);
       const end = minDate(lastOfMonth(cursor), today);
-      if (start <= end) ranges.unshift({ start, end });
-      if (cursor === createdMonth) break;
+      if (bucketStart <= end) ranges.unshift({ start: bucketStart, end });
+      if (cursor === startMonth) break;
       cursor = shiftMonth(cursor, -1);
     }
   }
   return ranges;
 }
 
-export function spanForHistory(habit: Habit, today: string, period: "week" | "month"): DateSpan {
-  const ranges = historyBucketRanges(habit, today, period);
-  if (!ranges.length) return { start: habitStartDate(habit), end: today };
+export function spanForHistory(start: string, today: string, period: "week" | "month"): DateSpan {
+  const ranges = historyBucketRanges(start, today, period);
+  if (!ranges.length) return { start, end: today };
   return { start: ranges[0].start, end: today };
 }
 
 /** Bar per bucket: how many completions, and whether the bucket hit target. */
 export function computeHistory(
-  habit: Habit, entries: EntryMap, today: string, period: "week" | "month",
+  habit: Habit, start: string, entries: EntryMap, today: string, period: "week" | "month",
 ): HistoryBucket[] {
-  return historyBucketRanges(habit, today, period).map(({ start, end }) => ({
+  return historyBucketRanges(start, today, period).map(({ start, end }) => ({
     start,
     end,
     count: countCompletions(habit, entries, start, end),
@@ -276,11 +270,11 @@ export function computeHistory(
 
 // ── Heatmap ───────────────────────────────────────────────────────────
 
-export function spanForHeatmap(habit: Habit, month: string): DateSpan {
+export function spanForHeatmap(start: string, month: string): DateSpan {
   // Early days in the month average a window reaching into the previous
   // one, so the fetch has to start before the 1st.
   return {
-    start: maxDate(addDays(firstOfMonth(month), -(HEATMAP_WINDOW_DAYS - 1)), habitStartDate(habit)),
+    start: maxDate(addDays(firstOfMonth(month), -(HEATMAP_WINDOW_DAYS - 1)), start),
     end: lastOfMonth(month),
   };
 }
@@ -293,11 +287,10 @@ export function spanForHeatmap(habit: Habit, month: string): DateSpan {
  * only ever use two of the ramp's five colours. Days outside the habit's
  * life, and days still in the future, are level 0.
  */
-export function computeHeatmap(habit: Habit, entries: EntryMap, today: string, month: string): HeatmapDay[] {
-  const created = habitStartDate(habit);
+export function computeHeatmap(habit: Habit, start: string, entries: EntryMap, today: string, month: string): HeatmapDay[] {
   return dateRange(firstOfMonth(month), lastOfMonth(month)).map((date) => {
-    if (date > today || date < created) return { date, level: 0 as const };
-    const score = computeScore(habit, entries, clamp(addDays(date, -(HEATMAP_WINDOW_DAYS - 1)), created, date), date);
+    if (date > today || date < start) return { date, level: 0 as const };
+    const score = computeScore(habit, entries, clamp(addDays(date, -(HEATMAP_WINDOW_DAYS - 1)), start, date), date);
     const level = (score === 0 ? 0 : Math.min(4, Math.ceil(score / 25))) as HeatmapDay["level"];
     return { date, level };
   });

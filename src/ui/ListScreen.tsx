@@ -67,7 +67,6 @@ function HabitRow({ row, onToggle, onOpen }: {
   return (
     <div className="grid row">
       <button type="button" className="row__name" onClick={() => onOpen(habit)}>
-        {habit.icon ? <span className="row__icon" aria-hidden>{habit.icon}</span> : null}
         <span className="row__label">{habit.name}</span>
       </button>
 
@@ -116,7 +115,6 @@ function Group({ group, collapsed, onToggleCollapse, onToggle, onOpen }: {
         aria-controls={`group-${groupId}`}
       >
         {collapsed ? <ChevronRightIcon size={12} /> : <ChevronDownIcon size={12} />}
-        {group.routine?.icon ? <span aria-hidden>{group.routine.icon}</span> : null}
         <span>{name}</span>
       </button>
       <div id={`group-${groupId}`} hidden={collapsed}>

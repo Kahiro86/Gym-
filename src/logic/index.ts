@@ -10,33 +10,43 @@ import {
   spanForPeriod, spanForStreaks, spanForTrend, spanForHistory, spanForHeatmap,
   type DateSpan, type EntryMap,
 } from "./core.js";
-import type { Period } from "./period.js";
+import { effectiveStart, type Period } from "./period.js";
 
 export { getScoreColor, SCORE_COLOR_HEX } from "./core.js";
 export type {
   StreakRun, TrendPoint, HistoryBucket, HeatmapDay, ScoreColor, EntryMap, DateSpan,
 } from "./core.js";
 export type { Period } from "./period.js";
+export { effectiveStart, habitCreatedDate } from "./period.js";
 export { getListView, listDays, buildListView, DEFAULT_LIST_DAYS } from "./listView.js";
 export type { ListView, ListGroup, ListRow, ListCell, CellState } from "./listView.js";
+export { getDetailHeader, getOverview, describeFrequency, computeOverview, spanForDetail } from "./detail.js";
+export type { DetailHeader, Overview } from "./detail.js";
 
 interface Loaded {
   habit: Habit;
+  /** Earliest date this habit can be judged from. */
+  start: string;
   today: string;
   span: DateSpan;
   entries: EntryMap;
 }
 
 /**
- * Resolves the habit and "today", asks core.ts for the single span this
- * view needs, and fetches it in one query. Every public function below is
- * this call plus one pure computation.
+ * Resolves the habit, "today", and the habit's effective start (which
+ * accounts for backfilled history), asks core.ts for the single span the
+ * view needs, and fetches it in one query.
  */
-async function load(db: Db, habitId: string, span: (habit: Habit, today: string) => DateSpan): Promise<Loaded> {
-  const [habit, today] = await Promise.all([db.getHabit(habitId), db.getToday()]);
-  const resolved = span(habit, today);
+async function load(
+  db: Db, habitId: string, span: (habit: Habit, start: string, today: string) => DateSpan,
+): Promise<Loaded> {
+  const [habit, today, firstEntry] = await Promise.all([
+    db.getHabit(habitId), db.getToday(), db.getFirstEntryDate(habitId),
+  ]);
+  const start = effectiveStart(habit, firstEntry);
+  const resolved = span(habit, start, today);
   const entries = await db.getEntriesForHabit(habitId, resolved.start, resolved.end);
-  return { habit, today, span: resolved, entries: toEntryMap(entries) };
+  return { habit, start, today, span: resolved, entries: toEntryMap(entries) };
 }
 
 /** The base read everything above this layer uses for raw entries. */
@@ -45,33 +55,33 @@ export function getEntriesForRange(db: Db, habitId: string, startDate: string, e
 }
 
 export async function getScore(db: Db, habitId: string, period: Period): Promise<number> {
-  const { habit, span, entries } = await load(db, habitId, (h, t) => spanForPeriod(h, t, period));
+  const { habit, span, entries } = await load(db, habitId, (_h, s, t) => spanForPeriod(s, t, period));
   return computeScore(habit, entries, span.start, span.end);
 }
 
 export async function getCurrentStreak(db: Db, habitId: string): Promise<number> {
-  const { habit, today, entries } = await load(db, habitId, spanForStreaks);
-  return computeCurrentStreak(habit, entries, today);
+  const { habit, start, today, entries } = await load(db, habitId, (_h, s, t) => spanForStreaks(s, t));
+  return computeCurrentStreak(habit, start, entries, today);
 }
 
 export async function getBestStreaks(db: Db, habitId: string, limit: number) {
-  const { habit, today, entries } = await load(db, habitId, spanForStreaks);
-  return computeBestStreaks(habit, entries, today, limit);
+  const { habit, start, today, entries } = await load(db, habitId, (_h, s, t) => spanForStreaks(s, t));
+  return computeBestStreaks(habit, start, entries, today, limit);
 }
 
 export async function getScoreTrend(db: Db, habitId: string, period: Period) {
-  const { habit, today, entries } = await load(db, habitId, (h, t) => spanForTrend(h, t, period));
-  return computeTrend(habit, entries, today, period);
+  const { habit, start, today, entries } = await load(db, habitId, (_h, s, t) => spanForTrend(s, t, period));
+  return computeTrend(habit, start, entries, today, period);
 }
 
 export async function getHistory(db: Db, habitId: string, period: "week" | "month") {
-  const { habit, today, entries } = await load(db, habitId, (h, t) => spanForHistory(h, t, period));
-  return computeHistory(habit, entries, today, period);
+  const { habit, start, today, entries } = await load(db, habitId, (_h, s, t) => spanForHistory(s, t, period));
+  return computeHistory(habit, start, entries, today, period);
 }
 
 export async function getHeatmapData(db: Db, habitId: string, month: string) {
-  const { habit, today, entries } = await load(db, habitId, (h) => spanForHeatmap(h, month));
-  return computeHeatmap(habit, entries, today, month);
+  const { habit, start, today, entries } = await load(db, habitId, (_h, s) => spanForHeatmap(s, month));
+  return computeHeatmap(habit, start, entries, today, month);
 }
 
 /** Numeric entry. Layer 1 validates the value itself. */

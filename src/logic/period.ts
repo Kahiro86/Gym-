@@ -1,5 +1,5 @@
 import type { Habit } from "../db/types.js";
-import { addDays, instantToDateStr, maxDate } from "./dates.js";
+import { addDays, instantToDateStr, maxDate, minDate } from "./dates.js";
 
 export type Period = "week" | "month" | "year" | "all";
 
@@ -10,8 +10,24 @@ const WINDOW_DAYS: Record<Exclude<Period, "all">, number> = {
   year: 365,
 };
 
-export function habitStartDate(habit: Habit): string {
+/** The local calendar date the habit was created on. */
+export function habitCreatedDate(habit: Habit): string {
   return instantToDateStr(habit.createdAt);
+}
+
+/**
+ * The earliest date a habit can be judged from.
+ *
+ * Normally that is its creation date. But a user can backfill history —
+ * the calendar's EDIT flow stores whatever date they pick, including
+ * days before they created the habit. Anchoring on creation alone would
+ * silently drop that work from every score, streak and chart, so the
+ * first entry wins whenever it is older. This is what Layer 1's
+ * getFirstEntryDate exists for.
+ */
+export function effectiveStart(habit: Habit, firstEntryDate: string | null): string {
+  const created = habitCreatedDate(habit);
+  return firstEntryDate ? minDate(created, firstEntryDate) : created;
 }
 
 /**
@@ -21,14 +37,13 @@ export function habitStartDate(habit: Habit): string {
  * ones: a calendar month would drop every score to near-zero on the 1st,
  * which reads as failure rather than as a fresh month.
  *
- * The window never starts before the habit existed — a habit cannot be
- * judged on days that predate it. It is deliberately NOT clamped to the
- * first *entry* instead: days after creation that were never logged are
- * genuine misses and must stay in the denominator, or a habit logged once
- * and abandoned would show 100%.
+ * The window never begins before `start` — the habit cannot be judged on
+ * days that predate its existence and its history alike. It is
+ * deliberately NOT clamped forward to the most recent entry: days since
+ * then with nothing logged are genuine misses and must stay in the
+ * denominator, or a habit logged once and abandoned would read 100%.
  */
-export function resolvePeriodRange(period: Period, today: string, habit: Habit): { start: string; end: string } {
-  const created = habitStartDate(habit);
-  if (period === "all") return { start: created, end: today };
-  return { start: maxDate(addDays(today, -(WINDOW_DAYS[period] - 1)), created), end: today };
+export function resolvePeriodRange(period: Period, today: string, start: string): { start: string; end: string } {
+  if (period === "all") return { start, end: today };
+  return { start: maxDate(addDays(today, -(WINDOW_DAYS[period] - 1)), start), end: today };
 }

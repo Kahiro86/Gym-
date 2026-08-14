@@ -1,8 +1,9 @@
-import { StrictMode } from "react";
+import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { db } from "./db/index.js";
 import * as logic from "./logic/index.js";
 import { ListScreen } from "./ui/ListScreen.js";
+import { DetailScreen } from "./ui/DetailScreen.js";
 import "./ui/tokens.css";
 
 declare global {
@@ -18,10 +19,13 @@ window.__db = db;
 window.__logic = logic;
 
 function App() {
-  // Screen 2 (Detail) is the next build gate; tapping a habit name has
-  // nowhere to navigate yet, so this stays deliberately inert rather
-  // than opening a stand-in screen.
-  return <ListScreen onOpenHabit={() => {}} />;
+  // Two screens so far, so navigation is a single piece of state rather
+  // than a router. Screen 3 (calendar) joins at the next gate.
+  const [openHabitId, setOpenHabitId] = useState<string | null>(null);
+
+  return openHabitId
+    ? <DetailScreen habitId={openHabitId} onBack={() => setOpenHabitId(null)} />
+    : <ListScreen onOpenHabit={(habit) => setOpenHabitId(habit.id)} />;
 }
 
 createRoot(document.getElementById("root")!).render(
