@@ -5,15 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test:unit": "vitest run",
-    "test:accept": "node tests/acceptance/run.mjs"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:layer1": "node tests/acceptance/layer1.mjs",
+    "test:layer2": "node tests/acceptance/layer2.mjs"
   },
-  "dependencies": {
-    "@sqlite.org/sqlite-wasm": "3.51.2-build9",
+  "devDependencies": {
     "typescript": "5.7.3",
     "vite": "5.4.21",
     "vitest": "2.1.9"
+  },
+  "dependencies": {
+    "@sqlite.org/sqlite-wasm": "3.51.2-build9"
   }
 }

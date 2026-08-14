@@ -1,5 +1,5 @@
-// Domain types for Layer 1. These are the shapes stored/returned by the
-// data access module — Layer 2 and 3 depend only on these, never on SQL.
+// Layer 1's domain shapes and public API surface. Layers 2 and 3 depend
+// only on what is declared here — never on SQL, the Worker, or sqlite3.
 
 export type HabitType = "boolean" | "numeric";
 export type TargetDirection = "at_least" | "at_most";
@@ -25,12 +25,15 @@ export interface Habit {
   target: number | null;
   targetDirection: TargetDirection;
   frequencyType: FrequencyType;
-  frequencyDays: number[] | null; // 0-6, Sun-Sat, when specific_days
-  frequencyCount: number | null; // N, when times_per_week / times_per_month
+  /** 0-6 (Sun-Sat), only when frequencyType is "specific_days". */
+  frequencyDays: number[] | null;
+  /** N, only when frequencyType is "times_per_week"/"times_per_month". */
+  frequencyCount: number | null;
   routineId: string | null;
   sortOrder: number;
   color: string | null;
-  reminderTime: string | null; // "HH:MM"
+  /** "HH:MM", 24h local. */
+  reminderTime: string | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -39,14 +42,15 @@ export interface Habit {
 export interface Entry {
   id: string;
   habitId: string;
-  date: string; // YYYY-MM-DD, local calendar date
-  value: number; // 1/0 for boolean; logged amount for numeric
+  /** YYYY-MM-DD local calendar date — never a timestamp. */
+  date: string;
+  /** 1/0 for boolean habits; the logged amount for numeric habits. */
+  value: number;
   note: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-// ── Inputs ──────────────────────────────────────────────────────────
 export interface CreateRoutineInput {
   name: string;
   icon?: string | null;
@@ -70,11 +74,14 @@ export interface CreateHabitInput {
   color?: string | null;
   reminderTime?: string | null;
 }
-export type UpdateHabitPatch = Partial<Omit<CreateHabitInput, "type">> & { type?: HabitType };
+export type UpdateHabitPatch = Partial<CreateHabitInput>;
 
-// ── The public data access API — the ONLY surface Layer 2/3 may call ──
+/**
+ * The complete Layer 1 surface. Nothing above this layer may bypass it —
+ * if Layer 2 needs data not exposed here, a method gets added here rather
+ * than a query being written upstairs (spec Layer 1 §1, boundary rule).
+ */
 export interface Db {
-  // Routines
   createRoutine(data: CreateRoutineInput): Promise<Routine>;
   getRoutine(id: string): Promise<Routine>;
   listRoutines(opts?: { includeArchived?: boolean }): Promise<Routine[]>;
@@ -83,7 +90,6 @@ export interface Db {
   deleteRoutine(id: string): Promise<void>;
   reorderRoutines(orderedIds: string[]): Promise<void>;
 
-  // Habits
   createHabit(data: CreateHabitInput): Promise<Habit>;
   getHabit(id: string): Promise<Habit>;
   listHabits(opts?: { includeArchived?: boolean; routineId?: string | null }): Promise<Habit[]>;
@@ -93,7 +99,6 @@ export interface Db {
   deleteHabit(id: string, opts?: { confirmed?: boolean }): Promise<void>;
   reorderHabits(orderedIds: string[]): Promise<void>;
 
-  // Entries
   getEntry(habitId: string, date: string): Promise<Entry | null>;
   getEntriesForHabit(habitId: string, startDate: string, endDate: string): Promise<Entry[]>;
   getEntriesForDate(date: string): Promise<Entry[]>;
@@ -103,19 +108,25 @@ export interface Db {
   getFirstEntryDate(habitId: string): Promise<string | null>;
   getEntryCount(habitId: string): Promise<number>;
 
-  // Utility & settings
   getToday(): Promise<string>;
   getDayStartHour(): Promise<number>;
   setDayStartHour(hour: number): Promise<void>;
   getMeta(key: string): Promise<string | null>;
   setMeta(key: string, value: string): Promise<void>;
 
-  // Test-only seam (never used by production UI) — see clock.ts.
+  // ── Test-only seams. Never called by application code. ──────────────
+  /** Pins the Worker's clock; null restores the real one. */
   __setTestClock(ms: number | null): Promise<void>;
-  // Test-only introspection — used by acceptance tests to prove batch
-  // queries run as one statement rather than N.
-  __getQueryCount(): Promise<number>;
-  __resetQueryCount(): Promise<void>;
-  // Test-only raw dump — used to prove setDayStartHour never rewrites rows.
+  /** Statements executed through the repository since the last reset. */
+  __getStatementCount(): Promise<number>;
+  __resetStatementCount(): Promise<void>;
+  /** Full entries table, for before/after comparisons. */
   __dumpEntries(): Promise<Entry[]>;
+  /**
+   * Plain INSERT with no ON CONFLICT clause — the only way to genuinely
+   * attempt a duplicate (habit_id, date) row and observe the schema-level
+   * UNIQUE constraint reject it. setEntry() upserts by design and so can
+   * never produce the violation the spec requires be *proven*.
+   */
+  __rawInsertEntry(habitId: string, date: string, value: number): Promise<void>;
 }

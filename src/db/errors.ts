@@ -1,93 +1,79 @@
-// One error class per failure kind (spec Layer 1 §8). Each carries the
-// offending field/value so the message is never just "invalid input".
+// Typed errors (spec Layer 1 §8). Every one carries the offending field
+// and value — "invalid input" is explicitly not an acceptable message.
+//
+// These cross a Worker postMessage boundary, where prototypes are lost, so
+// each class is paired with serialize/revive so `instanceof` still works
+// for callers on the main thread.
 
 export class ValidationError extends Error {
-  readonly field: string;
-  readonly value: unknown;
-  constructor(field: string, value: unknown, message: string) {
-    super(`ValidationError: ${field} = ${JSON.stringify(value)} — ${message}`);
+  constructor(readonly field: string, readonly value: unknown, detail: string) {
+    super(`ValidationError: ${field} = ${JSON.stringify(value) ?? String(value)} — ${detail}`);
     this.name = "ValidationError";
-    this.field = field;
-    this.value = value;
   }
 }
 
 export class NotFoundError extends Error {
-  readonly entity: string;
-  readonly id: string;
-  constructor(entity: string, id: string) {
-    super(`NotFoundError: no ${entity} with id ${id}`);
+  constructor(readonly entity: string, readonly entityId: string) {
+    super(`NotFoundError: no ${entity} with id ${entityId}`);
     this.name = "NotFoundError";
-    this.entity = entity;
-    this.id = id;
   }
 }
 
 export class ConstraintError extends Error {
-  readonly constraint: string;
-  constructor(constraint: string, message: string) {
-    super(`ConstraintError: ${constraint} — ${message}`);
+  constructor(readonly constraint: string, detail: string) {
+    super(`ConstraintError: ${constraint} — ${detail}`);
     this.name = "ConstraintError";
-    this.constraint = constraint;
   }
 }
 
 export class ConfirmationRequiredError extends Error {
-  readonly action: string;
-  constructor(action: string) {
-    super(`ConfirmationRequiredError: ${action} requires { confirmed: true }`);
+  constructor(readonly action: string) {
+    super(`ConfirmationRequiredError: ${action} is destructive and requires { confirmed: true }`);
     this.name = "ConfirmationRequiredError";
-    this.action = action;
   }
 }
 
 export class IllegalStateChangeError extends Error {
-  readonly field: string;
-  constructor(field: string, message: string) {
-    super(`IllegalStateChangeError: ${field} — ${message}`);
+  constructor(readonly field: string, detail: string) {
+    super(`IllegalStateChangeError: ${field} — ${detail}`);
     this.name = "IllegalStateChangeError";
-    this.field = field;
   }
 }
 
-export type DbError =
-  | ValidationError
-  | NotFoundError
-  | ConstraintError
-  | ConfirmationRequiredError
-  | IllegalStateChangeError;
-
-const CTORS: Record<string, new (...args: never[]) => Error> = {
-  ValidationError,
-  NotFoundError,
-  ConstraintError,
-  ConfirmationRequiredError,
-  IllegalStateChangeError,
-};
-
-// Errors thrown inside the Worker cross a postMessage boundary as plain
-// data; this rebuilds a real Error instance (with the right prototype and
-// name) on the main-thread side of client.ts so callers can `instanceof` it.
-export function reviveError(serialized: { name: string; message: string; extra?: Record<string, unknown> }): Error {
-  const Ctor = CTORS[serialized.name];
-  if (!Ctor) {
-    const e = new Error(serialized.message);
-    e.name = serialized.name;
-    return e;
-  }
-  const e = Object.create(Ctor.prototype) as Error & Record<string, unknown>;
-  e.message = serialized.message;
-  e.name = serialized.name;
-  if (serialized.extra) Object.assign(e, serialized.extra);
-  return e;
+export interface SerializedError {
+  name: string;
+  message: string;
+  extra: Record<string, unknown>;
 }
 
-export function serializeError(err: unknown): { name: string; message: string; extra?: Record<string, unknown> } {
+export function serializeError(err: unknown): SerializedError {
   if (err instanceof ValidationError) return { name: err.name, message: err.message, extra: { field: err.field, value: err.value } };
-  if (err instanceof NotFoundError) return { name: err.name, message: err.message, extra: { entity: err.entity, id: err.id } };
+  if (err instanceof NotFoundError) return { name: err.name, message: err.message, extra: { entity: err.entity, entityId: err.entityId } };
   if (err instanceof ConstraintError) return { name: err.name, message: err.message, extra: { constraint: err.constraint } };
   if (err instanceof ConfirmationRequiredError) return { name: err.name, message: err.message, extra: { action: err.action } };
   if (err instanceof IllegalStateChangeError) return { name: err.name, message: err.message, extra: { field: err.field } };
-  if (err instanceof Error) return { name: err.name || "Error", message: err.message };
-  return { name: "Error", message: String(err) };
+  if (err instanceof Error) return { name: err.name || "Error", message: err.message, extra: {} };
+  return { name: "Error", message: String(err), extra: {} };
+}
+
+const PROTOTYPES: Record<string, object> = {
+  ValidationError: ValidationError.prototype,
+  NotFoundError: NotFoundError.prototype,
+  ConstraintError: ConstraintError.prototype,
+  ConfirmationRequiredError: ConfirmationRequiredError.prototype,
+  IllegalStateChangeError: IllegalStateChangeError.prototype,
+};
+
+export function reviveError(s: SerializedError): Error {
+  const proto = PROTOTYPES[s.name];
+  if (!proto) {
+    const plain = new Error(s.message);
+    plain.name = s.name;
+    return plain;
+  }
+  const err = Object.create(proto) as Error;
+  err.message = s.message;
+  err.name = s.name;
+  Object.assign(err, s.extra);
+  return err;
 }
