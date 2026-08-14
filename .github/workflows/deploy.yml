@@ -35,8 +35,10 @@ jobs:
 
       - run: npm run build
 
+      # Uses the pinned playwright devDependency, so the browser matches
+      # the library the suites import.
       - name: Install Chromium for the acceptance suites
-        run: npx --yes playwright@1.49.1 install --with-deps chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Layer 1 and Layer 2 acceptance against the built app
         run: |

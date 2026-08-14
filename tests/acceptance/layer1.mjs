@@ -3,7 +3,7 @@
 // These run a real Chromium against the real Worker + OPFS stack through
 // window.__db. Nothing is mocked or stubbed: a pass here means the actual
 // storage engine behaved, not that a test double did.
-import { chromium } from "/opt/node22/lib/node_modules/playwright/index.mjs";
+import { chromium } from "playwright";
 import fs from "node:fs";
 import os from "node:os";
 import { fileURLToPath } from "node:url";

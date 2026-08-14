@@ -7,7 +7,7 @@
 // span helper fetches enough data for its computation, and that a
 // multi-month habit built through the real write path produces the
 // numbers an independent calculation says it should.
-import { chromium } from "/opt/node22/lib/node_modules/playwright/index.mjs";
+import { chromium } from "playwright";
 
 const BASE_URL = process.env.BASE_URL || "http://localhost:5199/";
 const results = [];
