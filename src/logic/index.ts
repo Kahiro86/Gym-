@@ -21,6 +21,11 @@ export { effectiveStart, habitCreatedDate } from "./period.js";
 export { getListView, listDays, buildListView, DEFAULT_LIST_DAYS } from "./listView.js";
 export type { ListView, ListGroup, ListRow, ListCell, CellState } from "./listView.js";
 export { getDetailHeader, getOverview, describeFrequency, computeOverview, spanForDetail } from "./detail.js";
+export {
+  getCalendarMonth, getStreaksView, buildCalendarMonth, frequencyDots,
+  describeDay, stepMonth, WEEK_DOT_LABELS,
+} from "./calendar.js";
+export type { CalendarMonth, CalendarDay, StreaksView } from "./calendar.js";
 export type { DetailHeader, Overview } from "./detail.js";
 
 interface Loaded {

@@ -3,7 +3,35 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="dark" />
+<meta name="theme-color" content="#0A0908" />
 <title>Habits</title>
+<script>
+// Registers the header-adding service worker when the page is not
+// already cross-origin isolated, then reloads once so the worker is in
+// control. On a host that sends COOP/COEP itself (the dev server does)
+// this is a no-op and no worker is installed.
+(function () {
+  var RELOAD_GUARD = "coi-reload-attempted";
+  if (window.crossOriginIsolated) {
+    sessionStorage.removeItem(RELOAD_GUARD);
+    return;
+  }
+  if (!("serviceWorker" in navigator)) return; // the app reports the real error
+  navigator.serviceWorker
+    .register(new URL("coi-serviceworker.js", document.baseURI))
+    .then(function () { return navigator.serviceWorker.ready; })
+    .then(function () {
+      // One reload only. If isolation still fails afterwards the app
+      // shows why rather than looping.
+      if (!window.crossOriginIsolated && !sessionStorage.getItem(RELOAD_GUARD)) {
+        sessionStorage.setItem(RELOAD_GUARD, "1");
+        window.location.reload();
+      }
+    })
+    .catch(function (err) { console.error("coi registration failed:", err); });
+})();
+</script>
 </head>
 <body>
 <div id="root"></div>

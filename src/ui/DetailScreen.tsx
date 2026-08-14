@@ -10,7 +10,7 @@ import {
 import type { DetailHeader, Overview, Period, TrendPoint, HistoryBucket } from "../logic/index.js";
 import type { Habit } from "../db/types.js";
 import { useAsync } from "./useAsync.js";
-import { ChevronLeftIcon, EditIcon, MoreIcon, FlameIcon, TrophyIcon, RepeatIcon } from "./icons.js";
+import { ChevronLeftIcon, EditIcon, MoreIcon, FlameIcon, TrophyIcon, RepeatIcon, CalendarIcon } from "./icons.js";
 import "./DetailScreen.css";
 
 // ── Period toggle ─────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ const OVERVIEW_PERIODS = ["week", "month", "year"] as const;
 const TREND_PERIODS = ["week", "month", "year"] as const;
 const HISTORY_PERIODS = ["week", "month"] as const;
 
-export function DetailScreen({ habitId, onBack }: { habitId: string; onBack: () => void }) {
+export function DetailScreen({ habitId, onBack, onOpenCalendar }: { habitId: string; onBack: () => void; onOpenCalendar: () => void }) {
   // Three independent toggles: changing one never moves another.
   const [overviewPeriod, setOverviewPeriod] = useState<Period>("month");
   const [trendPeriod, setTrendPeriod] = useState<Period>("week");
@@ -233,6 +233,12 @@ export function DetailScreen({ habitId, onBack }: { habitId: string; onBack: () 
           <ChevronLeftIcon size={20} />
         </button>
         <span className="detail-topbar__title">{habit?.name ?? "…"}</span>
+        {/* The spec describes the calendar as its own screen but never
+            says how to reach it, so this is the entry point. */}
+        <button type="button" className="detail-topbar__icon" onClick={onOpenCalendar}
+          aria-label="Calendar and streaks">
+          <CalendarIcon />
+        </button>
         {/* Edit and overflow are part of Loop's header. The spec defines
             no behaviour for either, so none is invented here. */}
         <span className="detail-topbar__icon" aria-hidden><EditIcon /></span>

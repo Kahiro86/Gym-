@@ -1,0 +1,192 @@
+/* Screen 3 — calendar, best streaks, frequency. */
+
+.month-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.month-nav__btn {
+  display: flex;
+  padding: 2px 4px;
+  color: var(--accent-gold);
+}
+
+.month-nav__btn:disabled {
+  color: var(--text-secondary);
+  opacity: 0.35;
+  cursor: default;
+}
+
+.month-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.dow-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 4px;
+}
+
+.dow-row span {
+  text-align: center;
+  font-size: 9px;
+  color: var(--text-secondary);
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.cal-cell {
+  aspect-ratio: 1;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: var(--text-primary);
+  border: 1.5px solid transparent;
+  padding: 0;
+  width: 100%;
+}
+
+/* A gold border alone vanishes on a level-4 cell, which is also gold.
+   The inset ring in the card colour separates the two so today is
+   identifiable at every level of the ramp. */
+.cal-cell--today {
+  border-color: var(--accent-gold);
+  box-shadow: inset 0 0 0 1.5px var(--bg-card);
+}
+.cal-cell--future { opacity: 0.3; }
+.cal-cell--selected { border-color: var(--text-primary); }
+
+/* The five-step ramp, calendar only. */
+.lv0 { background: var(--heat-0); }
+.lv1 { background: var(--heat-1); }
+.lv2 { background: var(--heat-2); }
+.lv3 { background: var(--heat-3); }
+.lv4 { background: var(--heat-4); color: var(--bg-card); }
+
+.edit-btn {
+  display: block;
+  margin: 10px auto 0;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.edit-btn[aria-pressed="true"] {
+  color: var(--accent-gold);
+  background: var(--cell-empty);
+}
+
+.edit-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* ── Day popover ─────────────────────────────────────────────────── */
+.popover {
+  margin-top: 10px;
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--bg-page);
+}
+
+.popover__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.popover__date { font-size: 12px; color: var(--text-primary); }
+.popover__value { font-size: 12px; color: var(--text-secondary); }
+
+.popover__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.popover__action {
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 0.5px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.popover__action--primary { color: var(--accent-gold); border-color: var(--accent-gold); }
+.popover__action--danger { color: var(--danger-red); border-color: var(--danger-red); }
+
+.popover__number {
+  width: 88px;
+  background: var(--cell-empty);
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+/* ── Best streaks ────────────────────────────────────────────────── */
+.streak-row { margin-bottom: 8px; }
+.streak-row:last-child { margin-bottom: 0; }
+
+.streak-dates {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 3px;
+}
+
+.streak-bar {
+  background: var(--accent-gold);
+  height: 18px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 6px;
+  min-width: 26px;
+}
+
+.streak-bar span {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--bg-card);
+}
+
+/* ── Frequency dots ──────────────────────────────────────────────── */
+.freq-row { display: flex; gap: 6px; }
+.freq-day { flex: 1; text-align: center; }
+
+.freq-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-gold);
+  margin: 0 auto 4px;
+}
+
+.freq-dot--off { background: var(--cell-empty); }
+.freq-day span { font-size: 9px; color: var(--text-secondary); }
+
+.sk--grid { height: 180px; border-radius: 6px; }

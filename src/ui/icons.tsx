@@ -87,3 +87,10 @@ export const TrophyIcon = ({ size = 12, className }: IconProps) => (
     <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
   </svg>
 );
+
+export const CalendarIcon = ({ size = 17, className }: IconProps) => (
+  <svg {...base(size)} className={className}>
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <path d="M16 2v4M8 2v4M3 10h18" />
+  </svg>
+);
