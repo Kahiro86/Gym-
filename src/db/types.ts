@@ -51,6 +51,25 @@ export interface Entry {
   updatedAt: string;
 }
 
+/**
+ * Facts about where the bytes actually went. Reported by the running
+ * database, never asserted from source — "we open on X" is a claim, and
+ * only the live VFS can settle it.
+ */
+export interface VfsInfo {
+  /** The SQLite VFS the database is registered under. */
+  vfsName: string;
+  /** Files the VFS currently holds — the database, its journal, temps. */
+  files: string[];
+}
+
+export interface StorageInfo extends VfsInfo {
+  /** Whether the browser has granted eviction-resistant storage. */
+  persisted: boolean;
+  /** False when persistence was already granted and nothing was asked. */
+  persistRequested: boolean;
+}
+
 export interface CreateRoutineInput {
   name: string;
   icon?: string | null;
@@ -113,6 +132,9 @@ export interface Db {
   setDayStartHour(hour: number): Promise<void>;
   getMeta(key: string): Promise<string | null>;
   setMeta(key: string, value: string): Promise<void>;
+
+  /** Where the data is stored and whether it is safe from eviction. */
+  getStorageInfo(): Promise<StorageInfo>;
 
   // ── Test-only seams. Never called by application code. ──────────────
   /** Pins the Worker's clock; null restores the real one. */

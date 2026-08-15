@@ -2,7 +2,27 @@
 // so nothing above this module is aware a Worker exists at all.
 import { reviveError } from "./errors.js";
 import type { RpcRequest, RpcResponse } from "./protocol.js";
-import type { Db } from "./types.js";
+import type { Db, StorageInfo, VfsInfo } from "./types.js";
+
+/**
+ * Asks the browser not to evict this origin's storage, once per page.
+ *
+ * The local database is the source of truth between syncs, so eviction is
+ * data loss rather than a cache miss. This lives on the main thread and
+ * not beside the rest of Layer 1 in the Worker for a boring reason:
+ * `StorageManager.persist()` is exposed on Window only. `persisted()` and
+ * `estimate()` work in a Worker; the one call that matters does not.
+ *
+ * A refusal is recorded, not hidden — the user is entitled to know their
+ * data is evictable.
+ */
+const persistence: Promise<{ persisted: boolean; persistRequested: boolean }> = (async () => {
+  const s = navigator.storage;
+  if (!s?.persisted) return { persisted: false, persistRequested: false };
+  if (await s.persisted()) return { persisted: true, persistRequested: false };
+  if (!s.persist) return { persisted: false, persistRequested: false };
+  return { persisted: await s.persist(), persistRequested: true };
+})();
 
 class WorkerBridge {
   private readonly worker: Worker;
@@ -52,7 +72,18 @@ export function createDbClient(): Db {
       if (typeof prop !== "string") return undefined;
       let fn = cache.get(prop);
       if (!fn) {
-        fn = (...args: unknown[]) => bridge.call(prop, args);
+        // The one method whose answer is split across both sides of the
+        // boundary: the VFS knows where the bytes went, only the main
+        // thread can ask whether they are safe from eviction.
+        fn = prop === "getStorageInfo"
+          ? async (): Promise<StorageInfo> => {
+            const [vfs, p] = await Promise.all([
+              bridge.call("__getVfsInfo", []) as Promise<VfsInfo>,
+              persistence,
+            ]);
+            return { ...vfs, ...p };
+          }
+          : (...args: unknown[]) => bridge.call(prop, args);
         cache.set(prop, fn);
       }
       return fn;

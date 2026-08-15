@@ -40,10 +40,9 @@ jobs:
       - name: Install Chromium for the acceptance suites
         run: npx playwright install --with-deps chromium
 
-      # Served as GitHub Pages will serve it: static files, no isolation
-      # headers, so the service worker has to earn them. A timeout keeps
-      # a hung browser from stalling the whole deploy.
-      - name: Layer 1 and Layer 2 acceptance against the built app
+      # Served as GitHub Pages will serve it: static files, no special
+      # headers. A timeout keeps a hung browser from stalling the deploy.
+      - name: Acceptance suites against the built app
         timeout-minutes: 20
         run: |
           node tests/serve-dist.mjs &
@@ -53,7 +52,7 @@ jobs:
           done
           BASE_URL=http://localhost:5199/Gym-/ node tests/acceptance/layer1.mjs
           BASE_URL=http://localhost:5199/Gym-/ node tests/acceptance/layer2.mjs
-          BASE_URL=http://localhost:5199/Gym-/ node tests/acceptance/isolation.mjs
+          BASE_URL=http://localhost:5199/Gym-/ node tests/acceptance/storage.mjs
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

@@ -1,12 +1,11 @@
 // Serves ./dist exactly the way GitHub Pages will: plain static files
-// under the repo base path, with no COOP/COEP headers of its own.
+// under the repo base path, with no headers of its own.
 //
-// The acceptance suites run against this rather than `vite preview`
-// for two reasons. It is the honest shape — isolation has to come from
-// the service worker, as it will in production, instead of from a dev
-// server that helpfully sends the headers itself. And `vite preview`
-// with a base path served the entry module fine to curl but 404'd it to
-// a real browser, which silently turned every test into a timeout.
+// The acceptance suites run against this rather than `vite preview` for
+// two reasons. It is the honest shape — a bare static host, with nothing
+// a dev server might helpfully add. And `vite preview` with a base path
+// served the entry module fine to curl but 404'd it to a real browser,
+// which silently turned every test into a timeout.
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
