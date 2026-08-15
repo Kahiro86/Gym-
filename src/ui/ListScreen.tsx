@@ -15,6 +15,35 @@ import "./ListScreen.css";
 
 const WEEKDAY = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
+/**
+ * Unregisters every service worker, clears the reload budget, and starts
+ * the bootstrap from scratch. Recovering from a stuck isolation state
+ * should not require the user to find "clear site data" in a menu.
+ * Habit data lives in OPFS, not in the worker, so nothing is lost.
+ */
+async function resetIsolation(): Promise<void> {
+  try {
+    sessionStorage.removeItem("coi-attempts");
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+  } finally {
+    window.location.reload();
+  }
+}
+
+/** A one-line summary of why isolation did or did not happen. */
+function isolationDiagnostics(): string {
+  const sw = "serviceWorker" in navigator ? navigator.serviceWorker : null;
+  return [
+    `crossOriginIsolated=${window.crossOriginIsolated}`,
+    `sharedArrayBuffer=${typeof SharedArrayBuffer !== "undefined"}`,
+    `serviceWorker=${sw ? (sw.controller ? "controlling" : "registered-but-not-controlling") : "unsupported"}`,
+    `secureContext=${window.isSecureContext}`,
+  ].join("  ");
+}
+
 /** Column heading: weekday over day-of-month, e.g. THU / 25. */
 function dayLabel(dateStr: string): { weekday: string; day: string } {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -200,6 +229,15 @@ export function ListScreen({ onOpenHabit }: { onOpenHabit: (habit: Habit) => voi
             The database did not start. Nothing has been lost — the app simply cannot read it right now.
           </div>
           <div className="notice__detail">{view.error.message}</div>
+          {/* Storage needs cross-origin isolation, which on a host that
+              cannot send COOP/COEP is supplied by a service worker. When
+              that fails, these facts identify which step broke. */}
+          <div className="notice__detail">{isolationDiagnostics()}</div>
+          {/* A way out that does not require knowing about DevTools:
+              tear the worker down, forget the retry budget, start over. */}
+          <button type="button" className="notice__retry" onClick={resetIsolation}>
+            Reset and try again
+          </button>
         </div>
       )}
 

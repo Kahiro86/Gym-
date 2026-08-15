@@ -191,3 +191,12 @@
   text-align: left;
   word-break: break-word;
 }
+
+.notice__retry {
+  margin-top: 12px;
+  padding: 7px 14px;
+  border: 0.5px solid var(--accent-gold);
+  border-radius: 8px;
+  color: var(--accent-gold);
+  font-size: 12px;
+}

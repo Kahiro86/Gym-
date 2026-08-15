@@ -7,29 +7,58 @@
 <meta name="theme-color" content="#0A0908" />
 <title>Habits</title>
 <script>
-// Registers the header-adding service worker when the page is not
-// already cross-origin isolated, then reloads once so the worker is in
-// control. On a host that sends COOP/COEP itself (the dev server does)
-// this is a no-op and no worker is installed.
+// Installs the header-adding service worker when the host does not send
+// COOP/COEP itself, then reloads so the next navigation is served
+// through it. See public/coi-serviceworker.js for why this is needed.
+//
+// The reload is keyed on the service worker CONTROLLING this page, not
+// on it merely being ready: `navigator.serviceWorker.ready` resolves as
+// soon as a worker is active, which can happen while the current page
+// is still uncontrolled. Waiting on readiness and reloading exactly
+// once therefore loses the race whenever activation is slow, and the
+// page stays unisolated forever.
 (function () {
-  var RELOAD_GUARD = "coi-reload-attempted";
+  var KEY = "coi-attempts";
+  var MAX_ATTEMPTS = 3;
+
+  function attempts() {
+    try { return Number(sessionStorage.getItem(KEY)) || 0; } catch (e) { return 0; }
+  }
+  function reloadOnce(why) {
+    var n = attempts();
+    if (n >= MAX_ATTEMPTS) return; // give up; the app explains the real reason
+    try { sessionStorage.setItem(KEY, String(n + 1)); } catch (e) { /* private mode */ }
+    console.info("coi: reloading to gain isolation (" + why + ")");
+    window.location.reload();
+  }
+
   if (window.crossOriginIsolated) {
-    sessionStorage.removeItem(RELOAD_GUARD);
+    try { sessionStorage.removeItem(KEY); } catch (e) { /* private mode */ }
     return;
   }
-  if (!("serviceWorker" in navigator)) return; // the app reports the real error
-  navigator.serviceWorker
-    .register(new URL("coi-serviceworker.js", document.baseURI))
-    .then(function () { return navigator.serviceWorker.ready; })
-    .then(function () {
-      // One reload only. If isolation still fails afterwards the app
-      // shows why rather than looping.
-      if (!window.crossOriginIsolated && !sessionStorage.getItem(RELOAD_GUARD)) {
-        sessionStorage.setItem(RELOAD_GUARD, "1");
-        window.location.reload();
-      }
-    })
-    .catch(function (err) { console.error("coi registration failed:", err); });
+  if (!("serviceWorker" in navigator)) return;
+  if (attempts() >= MAX_ATTEMPTS) return;
+
+  var sw = navigator.serviceWorker;
+
+  // The worker taking control is the signal that a fresh navigation can
+  // now be given the isolation headers.
+  sw.addEventListener("controllerchange", function () { reloadOnce("controllerchange"); });
+
+  sw.register(new URL("coi-serviceworker.js", document.baseURI)).then(
+    function (reg) {
+      // Only reload for a genuine update. On the very first install
+      // there is no controller yet, and controllerchange below already
+      // handles that case - reloading here too would double the jank.
+      reg.addEventListener("updatefound", function () {
+        if (sw.controller) reloadOnce("updatefound");
+      });
+      // A worker exists but is not driving this page: only a reload
+      // routes the navigation request through it.
+      if (reg.active && !sw.controller) reloadOnce("active but uncontrolled");
+    },
+    function (err) { console.error("coi: registration failed:", err); },
+  );
 })();
 </script>
 </head>
