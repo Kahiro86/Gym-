@@ -160,7 +160,10 @@ function Skeleton({ dayCount }: { dayCount: number }) {
   );
 }
 
-export function ListScreen({ onOpenHabit }: { onOpenHabit: (habit: Habit) => void }) {
+export function ListScreen({ onOpenHabit, onAddHabit }: {
+  onOpenHabit: (habit: Habit) => void;
+  onAddHabit: () => void;
+}) {
   const dayCount = DEFAULT_LIST_DAYS;
   const view = useAsync<ListView>(() => getListView(db, dayCount), [dayCount]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -186,11 +189,15 @@ export function ListScreen({ onOpenHabit }: { onOpenHabit: (habit: Habit) => voi
     <div className="screen" style={{ ["--day-count" as string]: dayCount }}>
       <header className="topbar">
         <span className="topbar__title">Habits</span>
-        {/* Loop's three top-bar actions. Rendered for layout fidelity;
-            the spec defines no behaviour for them, so none is invented. */}
-        <span className="topbar__action" aria-hidden><PlusIcon /></span>
-        <span className="topbar__action" aria-hidden><FilterIcon /></span>
-        <span className="topbar__action" aria-hidden><MoreIcon /></span>
+        <button type="button" className="topbar__action" onClick={onAddHabit} aria-label="Add a habit">
+          <PlusIcon />
+        </button>
+        {/* Filter and overflow are Loop's, kept for layout fidelity. The
+            spec defines no behaviour for them, so none is invented — but
+            they are not focusable either, so nothing offers a tap that
+            does nothing. */}
+        <span className="topbar__action topbar__action--inert" aria-hidden><FilterIcon /></span>
+        <span className="topbar__action topbar__action--inert" aria-hidden><MoreIcon /></span>
       </header>
 
       <div className="grid colheader">
@@ -232,6 +239,12 @@ export function ListScreen({ onOpenHabit }: { onOpenHabit: (habit: Habit) => voi
           <div className="notice__body">
             Habits you add will appear here as a row each, with the last five days beside them.
           </div>
+          {/* The empty state is where someone is most likely to be
+              looking for the way in, so it offers one rather than only
+              pointing at an icon in the corner. */}
+          <button type="button" className="notice__retry" onClick={onAddHabit}>
+            Add your first habit
+          </button>
         </div>
       )}
 

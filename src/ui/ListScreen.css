@@ -23,12 +23,18 @@
   color: var(--text-primary);
 }
 
+/* 40px so the add control is comfortably tappable on a phone. */
 .topbar__action {
   display: flex;
   align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
   color: var(--accent-gold);
-  padding: 4px;
 }
+
+/* Decorative only: dimmed so it does not read as an offer. */
+.topbar__action--inert { opacity: 0.45; }
 
 /* ── Column header ───────────────────────────────────────────────── */
 .grid {

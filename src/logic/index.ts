@@ -27,6 +27,12 @@ export {
 } from "./calendar.js";
 export type { CalendarMonth, CalendarDay, StreaksView } from "./calendar.js";
 export type { DetailHeader, Overview } from "./detail.js";
+export {
+  emptyDraft, draftFromHabit, validateDraft, toCreateInput,
+  createHabit, updateHabit, archiveHabit, unarchiveHabit, deleteHabit, deleteEntry,
+  listRoutines, createRoutine, canChangeType,
+} from "./editor.js";
+export type { HabitDraft, DraftProblem } from "./editor.js";
 
 interface Loaded {
   habit: Habit;

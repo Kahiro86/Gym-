@@ -2,7 +2,7 @@
 import { useCallback, useState } from "react";
 import { db } from "../db/index.js";
 import {
-  getCalendarMonth, getStreaksView, describeDay, stepMonth, toggleEntry, setEntry,
+  getCalendarMonth, getStreaksView, describeDay, stepMonth, toggleEntry, setEntry, deleteEntry,
   WEEK_DOT_LABELS,
 } from "../logic/index.js";
 import type { CalendarDay, CalendarMonth, StreaksView } from "../logic/index.js";
@@ -123,7 +123,7 @@ export function CalendarScreen({ habitId, onBack }: { habitId: string; onBack: (
     setWriteError(null);
     try {
       if (action === "toggle") await toggleEntry(db, habitId, selectedDay.date);
-      else if (action === "clear") await db.deleteEntry(habitId, selectedDay.date);
+      else if (action === "clear") await deleteEntry(db, habitId, selectedDay.date);
       else await setEntry(db, habitId, selectedDay.date, action.value);
       reloadCalendar();
       reloadStreaks();

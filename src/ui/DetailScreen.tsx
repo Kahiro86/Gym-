@@ -204,7 +204,12 @@ const OVERVIEW_PERIODS = ["week", "month", "year"] as const;
 const TREND_PERIODS = ["week", "month", "year"] as const;
 const HISTORY_PERIODS = ["week", "month"] as const;
 
-export function DetailScreen({ habitId, onBack, onOpenCalendar }: { habitId: string; onBack: () => void; onOpenCalendar: () => void }) {
+export function DetailScreen({ habitId, onBack, onOpenCalendar, onEdit }: {
+  habitId: string;
+  onBack: () => void;
+  onOpenCalendar: () => void;
+  onEdit: (habit: Habit) => void;
+}) {
   // Three independent toggles: changing one never moves another.
   const [overviewPeriod, setOverviewPeriod] = useState<Period>("month");
   const [trendPeriod, setTrendPeriod] = useState<Period>("week");
@@ -239,10 +244,21 @@ export function DetailScreen({ habitId, onBack, onOpenCalendar }: { habitId: str
           aria-label="Calendar and streaks">
           <CalendarIcon />
         </button>
-        {/* Edit and overflow are part of Loop's header. The spec defines
-            no behaviour for either, so none is invented here. */}
-        <span className="detail-topbar__icon" aria-hidden><EditIcon /></span>
-        <span className="detail-topbar__icon" aria-hidden><MoreIcon /></span>
+        {/* Edit opens the same form that creates a habit, and is also
+            the only route to archiving or deleting one. Disabled until
+            the habit has loaded, since there is nothing yet to edit. */}
+        <button
+          type="button"
+          className="detail-topbar__icon"
+          onClick={() => habit && onEdit(habit)}
+          disabled={!habit}
+          aria-label="Edit this habit"
+        >
+          <EditIcon />
+        </button>
+        {/* Loop's overflow menu. The spec defines no behaviour for it, so
+            none is invented — dimmed so it does not read as an offer. */}
+        <span className="detail-topbar__icon detail-topbar__icon--inert" aria-hidden><MoreIcon /></span>
       </header>
 
       {/* A. Header card */}

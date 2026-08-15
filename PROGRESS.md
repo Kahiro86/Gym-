@@ -11,12 +11,17 @@ the 4am day-start, the tri-state entry model, `UNIQUE(habit_id, date)`.
 ## Layer 2 — logic — DONE
 Scores, streaks, trends, history, heatmap, and the three screens' view
 models. Pure core plus a thin async facade, so the arithmetic is testable
-without a browser. 160 unit tests, 17 integration tests.
+without a browser. 188 unit tests, 17 integration tests.
 
 ## Layer 3 — UI
 - Screen 1 (list) — DONE
 - Screen 2 (detail) — DONE
 - Screen 3 (calendar) — DONE
+- Habit editor — DONE. **Not in the build spec**, which describes three
+  read screens and no way to create a habit, so the "+" had nothing
+  behind it and the app could only ever be empty. Create, edit, archive
+  and delete, reached from the "+", the empty state and the detail
+  screen's pencil.
 - Deployed to GitHub Pages, gated on the full test suite.
 
 ## Layer 1b — sync — IN PROGRESS
@@ -66,15 +71,19 @@ without a browser. 160 unit tests, 17 integration tests.
 |---|---|
 | Layer 1 acceptance | 32/32 |
 | Layer 2 integration | 17/17 |
-| Layer 2 unit | 160/160 |
+| Layer 2 unit | 188/188 |
 | Storage (§9.2) | 6/6 |
 | Sync (§9.2-9.3) | 11/11 |
+| Editor | 12/12 |
 | Supabase (§9.4) | not run — no project |
 
-The Layer 2 sources and their tests are byte-identical to before Layer 1b.
+Every Layer 2 source and test that existed before Layer 1b is byte-identical
+to what it was then — that is §9.1's requirement, and it holds. Layer 2 has
+since *gained* `editor.ts` and its 28 unit tests, which is an addition for
+the habit editor, not a change to anything Layer 1b touched.
 
 ## Next
-Layer 1b gate, then Supabase provisioning, then the remaining §9.4 tests.
+Supabase provisioning, then the remaining §9.4 tests.
 
 ---
 
@@ -105,6 +114,15 @@ Layer 1b gate, then Supabase provisioning, then the remaining §9.4 tests.
    §9.1's "unmodified", and it is a conflict between §9.1 and §4 rather
    than a weakened test.
 6. **Test counts differ from the spec's.** §9.1 cites 138 Layer 2 unit
-   tests and 17 integration tests; the suite has 160 and 17. The tests
-   were rewritten during the Opus 5 rebuild. The binding requirement —
-   they pass with zero Layer 2 edits — holds.
+   tests and 17 integration tests; the suite has 188 and 17. The tests
+   were rewritten during the Opus 5 rebuild, and the editor added 28
+   more. The binding requirement — the pre-Layer-1b Layer 2 tests pass
+   with zero edits to Layer 2 — holds.
+7. **A habit editor was added, which no spec describes.** The build spec
+   defines three read screens; without a way to create a habit the app
+   is permanently empty, which is what shipped. Layer 2 gained
+   `editor.ts` (draft shape, validation, write passthroughs) so the new
+   screen still imports only from Layer 2.
+8. **CalendarScreen called `db.deleteEntry` directly**, bypassing Layer 2
+   — a boundary violation from the Screen 3 work. It now goes through
+   Layer 2's `deleteEntry`.
