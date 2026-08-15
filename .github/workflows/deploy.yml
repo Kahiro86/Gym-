@@ -53,6 +53,7 @@ jobs:
           done
           BASE_URL=http://localhost:5199/Gym-/ node tests/acceptance/layer1.mjs
           BASE_URL=http://localhost:5199/Gym-/ node tests/acceptance/layer2.mjs
+          BASE_URL=http://localhost:5199/Gym-/ node tests/acceptance/isolation.mjs
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
