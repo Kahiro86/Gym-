@@ -62,6 +62,54 @@ const localDateStr = (d: Date): string =>
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+// ── Sync bookkeeping (Layer 1b §4) ────────────────────────────────────
+export type SyncTable = "habits" | "routines" | "entries";
+type SyncOperation = "upsert" | "delete";
+
+/**
+ * The row as the server should see it. `sync_status` is local-only
+ * bookkeeping (§4.1) and is stripped here rather than at push time, so
+ * there is exactly one place it can leak from and it is this one.
+ */
+function pushPayload(row: Record<string, unknown>): Record<string, unknown> {
+  const { sync_status: _ignored, ...rest } = row;
+  return rest;
+}
+
+/**
+ * The columns that travel to and from the server, per table. Listed
+ * explicitly rather than derived from the schema so that adding a column
+ * is a decision about whether it syncs, not an accident. `sync_status` is
+ * absent from every list on purpose — it is local bookkeeping (§4.1).
+ */
+const SYNCED_COLUMNS: Record<SyncTable, string[]> = {
+  routines: [
+    "id", "name", "icon", "sort_order", "archived_at", "created_at", "updated_at",
+    "user_id", "deleted_at",
+  ],
+  habits: [
+    "id", "name", "icon", "question", "type", "unit", "target", "target_direction",
+    "frequency_type", "frequency_days", "frequency_count", "routine_id", "sort_order",
+    "color", "reminder_time", "archived_at", "created_at", "updated_at",
+    "user_id", "deleted_at",
+  ],
+  entries: [
+    "id", "habit_id", "date", "value", "note", "created_at", "updated_at",
+    "user_id", "deleted_at",
+  ],
+};
+
+export interface SyncQueueItem {
+  id: number;
+  tableName: SyncTable;
+  recordId: string;
+  operation: SyncOperation;
+  payload: Record<string, unknown>;
+  attempts: number;
+  lastError: string | null;
+  createdAt: string;
+}
+
 // ── Row → domain ──────────────────────────────────────────────────────
 const toRoutine = (r: Record<string, unknown>): Routine => ({
   id: String(r.id),
@@ -166,27 +214,61 @@ export class Repository {
     runMigrations(db as unknown as Parameters<typeof runMigrations>[0]);
   }
 
+  // ── Sync bookkeeping ────────────────────────────────────────────────
+  /**
+   * Runs a mutation and records it for the sync engine in ONE transaction.
+   *
+   * This is the concrete reason Layer 1b keeps SQLite rather than moving
+   * the queue to a separate store: either the change and its queue row
+   * both land or neither does. A tab killed mid-write cannot leave data
+   * the server will never hear about, or a queue entry describing a write
+   * that did not happen.
+   *
+   * `sqlite3`'s `transaction()` hands back the same connection, so the
+   * existing `this.h` helpers are already inside the transaction.
+   */
+  private write<T>(cb: (enqueue: (table: SyncTable, recordId: string, op: SyncOperation) => void) => T): T {
+    return this.db.transaction(() => cb((table, recordId, op) => this.enqueue(table, recordId, op)));
+  }
+
+  private enqueue(table: SyncTable, recordId: string, operation: SyncOperation): void {
+    // The row as of write time, including a tombstone if that is what
+    // just happened — a delete is pushed as data, not as an absence.
+    const rows = this.h.rows(`SELECT * FROM ${table} WHERE id=?`, [recordId]);
+    const payload = rows.length ? pushPayload(rows[0]) : { id: recordId };
+    this.h.run(
+      `INSERT INTO sync_queue(table_name,record_id,operation,payload,attempts,last_error,created_at)
+       VALUES (?,?,?,?,0,NULL,?)`,
+      [table, recordId, operation, JSON.stringify(payload), stamp()],
+    );
+  }
+
   // ── Routines ────────────────────────────────────────────────────────
   createRoutine(data: CreateRoutineInput): Routine {
     if (!data?.name?.trim()) throw new ValidationError("name", data?.name, "routine name is required");
     const id = uuid();
     const ts = stamp();
-    this.h.run(
-      `INSERT INTO routines(id,name,icon,sort_order,archived_at,created_at,updated_at)
-       VALUES (?,?,?,?,NULL,?,?)`,
-      [id, data.name, data.icon ?? null, data.sortOrder ?? 0, ts, ts],
-    );
+    this.write((enqueue) => {
+      this.h.run(
+        `INSERT INTO routines(id,name,icon,sort_order,archived_at,created_at,updated_at)
+         VALUES (?,?,?,?,NULL,?,?)`,
+        [id, data.name, data.icon ?? null, data.sortOrder ?? 0, ts, ts],
+      );
+      enqueue("routines", id, "upsert");
+    });
     return this.getRoutine(id);
   }
 
   getRoutine(id: string): Routine {
-    const rows = this.h.rows(`SELECT * FROM routines WHERE id=?`, [id]);
+    const rows = this.h.rows(`SELECT * FROM routines WHERE id=? AND deleted_at IS NULL`, [id]);
     if (!rows.length) throw new NotFoundError("routine", id);
     return toRoutine(rows[0]);
   }
 
   listRoutines(opts: { includeArchived?: boolean } = {}): Routine[] {
-    const where = opts.includeArchived ? "" : "WHERE archived_at IS NULL";
+    const where = opts.includeArchived
+      ? "WHERE deleted_at IS NULL"
+      : "WHERE deleted_at IS NULL AND archived_at IS NULL";
     return this.h.rows(`SELECT * FROM routines ${where} ORDER BY sort_order, created_at`).map(toRoutine);
   }
 
@@ -196,8 +278,13 @@ export class Repository {
       throw new ValidationError("name", patch.name, "routine name is required");
     }
     const next = { ...cur, ...patch };
-    this.h.run(`UPDATE routines SET name=?, icon=?, sort_order=?, updated_at=? WHERE id=?`,
-      [next.name, next.icon, next.sortOrder, stamp(), id]);
+    this.write((enqueue) => {
+      this.h.run(
+        `UPDATE routines SET name=?, icon=?, sort_order=?, updated_at=?, sync_status='pending' WHERE id=?`,
+        [next.name, next.icon, next.sortOrder, stamp(), id],
+      );
+      enqueue("routines", id, "upsert");
+    });
     return this.getRoutine(id);
   }
 
@@ -209,29 +296,63 @@ export class Repository {
   archiveRoutine(id: string): void {
     this.getRoutine(id);
     const ts = stamp();
-    this.db.transaction((tx) => {
-      const h = helpers(tx);
-      h.run(`UPDATE habits SET routine_id=NULL, updated_at=? WHERE routine_id=?`, [ts, id]);
-      h.run(`UPDATE routines SET archived_at=?, updated_at=? WHERE id=?`, [ts, ts, id]);
+    this.write((enqueue) => {
+      const released = this.releaseHabitsFrom(id, ts);
+      this.h.run(
+        `UPDATE routines SET archived_at=?, updated_at=?, sync_status='pending' WHERE id=?`,
+        [ts, ts, id],
+      );
+      enqueue("routines", id, "upsert");
+      released.forEach((habitId) => enqueue("habits", habitId, "upsert"));
     });
   }
 
+  /**
+   * Soft delete with a tombstone (§6). Hard-removing the row would make
+   * it indistinguishable from one this device has simply never seen, and
+   * the next pull would resurrect it. Reads filter tombstones out, so
+   * from Layer 2's side the row is gone exactly as before.
+   */
   deleteRoutine(id: string): void {
     this.getRoutine(id);
     const ts = stamp();
-    this.db.transaction((tx) => {
-      const h = helpers(tx);
-      h.run(`UPDATE habits SET routine_id=NULL, updated_at=? WHERE routine_id=?`, [ts, id]);
-      h.run(`DELETE FROM routines WHERE id=?`, [id]);
+    this.write((enqueue) => {
+      const released = this.releaseHabitsFrom(id, ts);
+      this.h.run(
+        `UPDATE routines SET deleted_at=?, updated_at=?, sync_status='pending' WHERE id=?`,
+        [ts, ts, id],
+      );
+      enqueue("routines", id, "delete");
+      released.forEach((habitId) => enqueue("habits", habitId, "upsert"));
     });
+  }
+
+  /** Detaches a routine's habits, returning the ids that actually moved. */
+  private releaseHabitsFrom(routineId: string, ts: string): string[] {
+    const ids = this.h.rows(
+      `SELECT id FROM habits WHERE routine_id=? AND deleted_at IS NULL`, [routineId],
+    ).map((r) => String(r.id));
+    if (ids.length) {
+      this.h.run(
+        `UPDATE habits SET routine_id=NULL, updated_at=?, sync_status='pending'
+         WHERE routine_id=? AND deleted_at IS NULL`,
+        [ts, routineId],
+      );
+    }
+    return ids;
   }
 
   reorderRoutines(orderedIds: string[]): void {
     this.assertAllExist("routines", "routine", orderedIds);
     const ts = stamp();
-    this.db.transaction((tx) => {
-      const h = helpers(tx);
-      orderedIds.forEach((id, i) => h.run(`UPDATE routines SET sort_order=?, updated_at=? WHERE id=?`, [i, ts, id]));
+    this.write((enqueue) => {
+      orderedIds.forEach((id, i) => {
+        this.h.run(
+          `UPDATE routines SET sort_order=?, updated_at=?, sync_status='pending' WHERE id=?`,
+          [i, ts, id],
+        );
+        enqueue("routines", id, "upsert");
+      });
     });
   }
 
@@ -251,35 +372,39 @@ export class Repository {
     if (data.routineId) this.getRoutine(data.routineId);
     const id = uuid();
     const ts = stamp();
-    this.h.run(
-      `INSERT INTO habits(id,name,icon,question,type,unit,target,target_direction,frequency_type,
-                          frequency_days,frequency_count,routine_id,sort_order,color,reminder_time,
-                          archived_at,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,?)`,
-      [id, data.name, data.icon ?? null, data.question ?? null, data.type, data.unit ?? null,
-        data.target ?? null, targetDirection, data.frequencyType,
-        data.frequencyDays ? JSON.stringify(data.frequencyDays) : null, data.frequencyCount ?? null,
-        data.routineId ?? null, data.sortOrder ?? 0, data.color ?? null, data.reminderTime ?? null, ts, ts],
-    );
+    this.write((enqueue) => {
+      this.h.run(
+        `INSERT INTO habits(id,name,icon,question,type,unit,target,target_direction,frequency_type,
+                            frequency_days,frequency_count,routine_id,sort_order,color,reminder_time,
+                            archived_at,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,?)`,
+        [id, data.name, data.icon ?? null, data.question ?? null, data.type, data.unit ?? null,
+          data.target ?? null, targetDirection, data.frequencyType,
+          data.frequencyDays ? JSON.stringify(data.frequencyDays) : null, data.frequencyCount ?? null,
+          data.routineId ?? null, data.sortOrder ?? 0, data.color ?? null, data.reminderTime ?? null, ts, ts],
+      );
+      enqueue("habits", id, "upsert");
+    });
     return this.getHabit(id);
   }
 
   getHabit(id: string): Habit {
-    const rows = this.h.rows(`SELECT * FROM habits WHERE id=?`, [id]);
+    const rows = this.h.rows(`SELECT * FROM habits WHERE id=? AND deleted_at IS NULL`, [id]);
     if (!rows.length) throw new NotFoundError("habit", id);
     return toHabit(rows[0]);
   }
 
   listHabits(opts: { includeArchived?: boolean; routineId?: string | null } = {}): Habit[] {
-    const clauses: string[] = [];
+    const clauses: string[] = ["deleted_at IS NULL"];
     const bind: unknown[] = [];
     if (!opts.includeArchived) clauses.push("archived_at IS NULL");
     if (opts.routineId !== undefined) {
       if (opts.routineId === null) clauses.push("routine_id IS NULL");
       else { clauses.push("routine_id=?"); bind.push(opts.routineId); }
     }
-    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-    return this.h.rows(`SELECT * FROM habits ${where} ORDER BY sort_order, created_at`, bind).map(toHabit);
+    return this.h.rows(
+      `SELECT * FROM habits WHERE ${clauses.join(" AND ")} ORDER BY sort_order, created_at`, bind,
+    ).map(toHabit);
   }
 
   /**
@@ -315,50 +440,87 @@ export class Repository {
     };
     validateHabitShape(shape);
 
-    this.h.run(
-      `UPDATE habits SET name=?, icon=?, question=?, type=?, unit=?, target=?, target_direction=?,
-                         frequency_type=?, frequency_days=?, frequency_count=?, routine_id=?,
-                         sort_order=?, color=?, reminder_time=?, updated_at=?
-       WHERE id=?`,
-      [
-        pick("name", cur.name), pick("icon", cur.icon), pick("question", cur.question),
-        shape.type, shape.unit, shape.target, shape.targetDirection, shape.frequencyType,
-        shape.frequencyDays ? JSON.stringify(shape.frequencyDays) : null, shape.frequencyCount,
-        pick("routineId", cur.routineId), pick("sortOrder", cur.sortOrder),
-        pick("color", cur.color), pick("reminderTime", cur.reminderTime), stamp(), id,
-      ],
-    );
+    this.write((enqueue) => {
+      this.h.run(
+        `UPDATE habits SET name=?, icon=?, question=?, type=?, unit=?, target=?, target_direction=?,
+                           frequency_type=?, frequency_days=?, frequency_count=?, routine_id=?,
+                           sort_order=?, color=?, reminder_time=?, updated_at=?, sync_status='pending'
+         WHERE id=?`,
+        [
+          pick("name", cur.name), pick("icon", cur.icon), pick("question", cur.question),
+          shape.type, shape.unit, shape.target, shape.targetDirection, shape.frequencyType,
+          shape.frequencyDays ? JSON.stringify(shape.frequencyDays) : null, shape.frequencyCount,
+          pick("routineId", cur.routineId), pick("sortOrder", cur.sortOrder),
+          pick("color", cur.color), pick("reminderTime", cur.reminderTime), stamp(), id,
+        ],
+      );
+      enqueue("habits", id, "upsert");
+    });
     return this.getHabit(id);
   }
 
-  /** Soft delete — hides the habit, keeps every entry. Reversible. */
+  /** Hides the habit, keeps every entry. Reversible, and NOT a tombstone. */
   archiveHabit(id: string): void {
     this.getHabit(id);
     const ts = stamp();
-    this.h.run(`UPDATE habits SET archived_at=?, updated_at=? WHERE id=?`, [ts, ts, id]);
+    this.write((enqueue) => {
+      this.h.run(
+        `UPDATE habits SET archived_at=?, updated_at=?, sync_status='pending' WHERE id=?`, [ts, ts, id],
+      );
+      enqueue("habits", id, "upsert");
+    });
   }
 
   unarchiveHabit(id: string): void {
     this.getHabit(id);
-    this.h.run(`UPDATE habits SET archived_at=NULL, updated_at=? WHERE id=?`, [stamp(), id]);
+    this.write((enqueue) => {
+      this.h.run(
+        `UPDATE habits SET archived_at=NULL, updated_at=?, sync_status='pending' WHERE id=?`, [stamp(), id],
+      );
+      enqueue("habits", id, "upsert");
+    });
   }
 
   /**
-   * Permanent, cascades entries, and unreachable by a stray tap: the
-   * confirmation flag is enforced at the API level (non-negotiable #7).
+   * Unreachable by a stray tap: the confirmation flag is enforced at the
+   * API level (non-negotiable #7).
+   *
+   * Tombstoned rather than removed (§6), and the entries are tombstoned
+   * with it. The ON DELETE CASCADE on the foreign key does not fire for a
+   * soft delete, so the cascade is written out — the observable result is
+   * the same as before, since every read filters tombstones.
    */
   deleteHabit(id: string, opts: { confirmed?: boolean } = {}): void {
     this.getHabit(id);
     if (!opts.confirmed) throw new ConfirmationRequiredError("deleteHabit");
-    this.h.run(`DELETE FROM habits WHERE id=?`, [id]);
+    const ts = stamp();
+    this.write((enqueue) => {
+      const entryIds = this.h.rows(
+        `SELECT id FROM entries WHERE habit_id=? AND deleted_at IS NULL`, [id],
+      ).map((r) => String(r.id));
+      this.h.run(
+        `UPDATE entries SET deleted_at=?, updated_at=?, sync_status='pending'
+         WHERE habit_id=? AND deleted_at IS NULL`,
+        [ts, ts, id],
+      );
+      this.h.run(
+        `UPDATE habits SET deleted_at=?, updated_at=?, sync_status='pending' WHERE id=?`, [ts, ts, id],
+      );
+      entryIds.forEach((entryId) => enqueue("entries", entryId, "delete"));
+      enqueue("habits", id, "delete");
+    });
   }
 
   reorderHabits(orderedIds: string[]): void {
     this.assertAllExist("habits", "habit", orderedIds);
     const ts = stamp();
-    this.db.transaction((tx) => {
-      const h = helpers(tx);
-      orderedIds.forEach((id, i) => h.run(`UPDATE habits SET sort_order=?, updated_at=? WHERE id=?`, [i, ts, id]));
+    this.write((enqueue) => {
+      orderedIds.forEach((id, i) => {
+        this.h.run(
+          `UPDATE habits SET sort_order=?, updated_at=?, sync_status='pending' WHERE id=?`, [i, ts, id],
+        );
+        enqueue("habits", id, "upsert");
+      });
     });
   }
 
@@ -366,7 +528,9 @@ export class Repository {
     if (!ids.length) return;
     const placeholders = ids.map(() => "?").join(",");
     const found = new Set(
-      this.h.rows(`SELECT id FROM ${table} WHERE id IN (${placeholders})`, ids).map((r) => String(r.id)),
+      this.h.rows(
+        `SELECT id FROM ${table} WHERE id IN (${placeholders}) AND deleted_at IS NULL`, ids,
+      ).map((r) => String(r.id)),
     );
     const missing = ids.find((id) => !found.has(id));
     if (missing) throw new NotFoundError(entity, missing);
@@ -374,19 +538,24 @@ export class Repository {
 
   // ── Entries ─────────────────────────────────────────────────────────
   getEntry(habitId: string, date: string): Entry | null {
-    const rows = this.h.rows(`SELECT * FROM entries WHERE habit_id=? AND date=?`, [habitId, date]);
+    const rows = this.h.rows(
+      `SELECT * FROM entries WHERE habit_id=? AND date=? AND deleted_at IS NULL`, [habitId, date],
+    );
     return rows.length ? toEntry(rows[0]) : null;
   }
 
   getEntriesForHabit(habitId: string, startDate: string, endDate: string): Entry[] {
     return this.h.rows(
-      `SELECT * FROM entries WHERE habit_id=? AND date>=? AND date<=? ORDER BY date`,
+      `SELECT * FROM entries WHERE habit_id=? AND date>=? AND date<=? AND deleted_at IS NULL
+       ORDER BY date`,
       [habitId, startDate, endDate],
     ).map(toEntry);
   }
 
   getEntriesForDate(date: string): Entry[] {
-    return this.h.rows(`SELECT * FROM entries WHERE date=? ORDER BY habit_id`, [date]).map(toEntry);
+    return this.h.rows(
+      `SELECT * FROM entries WHERE date=? AND deleted_at IS NULL ORDER BY habit_id`, [date],
+    ).map(toEntry);
   }
 
   /** One statement regardless of habit count — the list view depends on this. */
@@ -395,6 +564,7 @@ export class Repository {
     const placeholders = habitIds.map(() => "?").join(",");
     return this.h.rows(
       `SELECT * FROM entries WHERE habit_id IN (${placeholders}) AND date>=? AND date<=?
+         AND deleted_at IS NULL
        ORDER BY habit_id, date`,
       [...habitIds, startDate, endDate],
     ).map(toEntry);
@@ -411,27 +581,66 @@ export class Repository {
     if (!DATE_RE.test(date)) throw new ValidationError("date", date, "must be a YYYY-MM-DD local calendar date");
     if (typeof value !== "number" || Number.isNaN(value)) throw new ValidationError("value", value, "must be a number");
     const ts = stamp();
-    this.h.run(
-      `INSERT INTO entries(id,habit_id,date,value,note,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?)
-       ON CONFLICT(habit_id,date) DO UPDATE
-         SET value=excluded.value, note=excluded.note, updated_at=excluded.updated_at`,
-      [uuid(), habitId, date, value, note, ts, ts],
-    );
-    return this.getEntry(habitId, date) as Entry;
+    const entry = this.write((enqueue) => {
+      this.h.run(
+        `INSERT INTO entries(id,habit_id,date,value,note,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?)
+         ON CONFLICT(habit_id,date) DO UPDATE
+           SET value=excluded.value, note=excluded.note, updated_at=excluded.updated_at,
+               deleted_at=NULL, sync_status='pending'`,
+        [uuid(), habitId, date, value, note, ts, ts],
+      );
+      // Clearing deleted_at above is what makes a re-logged day revive the
+      // existing row rather than collide with its tombstone: the UNIQUE
+      // index does not care that a row is dead, so there is only ever one
+      // row per habit-day and the constraint stays meaningful.
+      const row = this.getEntryRow(habitId, date);
+      enqueue("entries", String(row.id), "upsert");
+      return toEntry(row);
+    });
+    return entry;
   }
 
+  /**
+   * Tombstone, not DELETE (§6). A removed row is indistinguishable from
+   * one this device has never seen, so the next pull would resurrect it
+   * forever. Reads filter tombstones, so getEntry still returns null and
+   * the tri-state model Layer 1 §4.4 defines is unchanged from above.
+   */
   deleteEntry(habitId: string, date: string): void {
-    this.h.run(`DELETE FROM entries WHERE habit_id=? AND date=?`, [habitId, date]);
+    const rows = this.h.rows(
+      `SELECT id FROM entries WHERE habit_id=? AND date=? AND deleted_at IS NULL`, [habitId, date],
+    );
+    if (!rows.length) return;
+    const id = String(rows[0].id);
+    const ts = stamp();
+    this.write((enqueue) => {
+      this.h.run(
+        `UPDATE entries SET deleted_at=?, updated_at=?, sync_status='pending' WHERE id=?`, [ts, ts, id],
+      );
+      enqueue("entries", id, "delete");
+    });
+  }
+
+  private getEntryRow(habitId: string, date: string): Record<string, unknown> {
+    const rows = this.h.rows(
+      `SELECT * FROM entries WHERE habit_id=? AND date=? AND deleted_at IS NULL`, [habitId, date],
+    );
+    if (!rows.length) throw new NotFoundError("entry", `${habitId}@${date}`);
+    return rows[0];
   }
 
   getFirstEntryDate(habitId: string): string | null {
-    const v = this.h.one(`SELECT MIN(date) FROM entries WHERE habit_id=?`, [habitId]);
+    const v = this.h.one(
+      `SELECT MIN(date) FROM entries WHERE habit_id=? AND deleted_at IS NULL`, [habitId],
+    );
     return v == null ? null : String(v);
   }
 
   getEntryCount(habitId: string): number {
-    return Number(this.h.one(`SELECT COUNT(*) FROM entries WHERE habit_id=?`, [habitId]));
+    return Number(this.h.one(
+      `SELECT COUNT(*) FROM entries WHERE habit_id=? AND deleted_at IS NULL`, [habitId],
+    ));
   }
 
   // ── Settings & utility ──────────────────────────────────────────────
@@ -475,9 +684,135 @@ export class Repository {
     return localDateStr(effective);
   }
 
+  // ── Sync queue (Layer 1b §4.2, §8) ──────────────────────────────────
+  /** Rows waiting to reach the server. The UI may see this count (§8). */
+  getPendingCount(): number {
+    return Number(this.h.one(`SELECT COUNT(*) FROM sync_queue`));
+  }
+
+  /** A row exactly as stored, tombstones included. Used by pull to compare. */
+  getRawRow(table: SyncTable, id: string): Record<string, unknown> | null {
+    const rows = this.h.rows(`SELECT * FROM ${table} WHERE id=?`, [id]);
+    return rows.length ? rows[0] : null;
+  }
+
+  /**
+   * Writes a row that came from the server. Deliberately does NOT enqueue:
+   * pushing back what was just pulled would loop forever. The row is
+   * marked `synced` because, by definition, it is.
+   *
+   * Unknown keys are dropped rather than passed through — the server may
+   * carry columns this client's schema does not have yet, and an INSERT
+   * naming one would fail outright.
+   */
+  applyRemoteRow(table: SyncTable, row: Record<string, unknown>): void {
+    const cols = SYNCED_COLUMNS[table].filter((c) => c in row);
+    if (!cols.includes("id")) throw new ValidationError("id", row.id, "a pulled row must carry its id");
+    const assignments = cols.filter((c) => c !== "id").map((c) => `${c}=excluded.${c}`);
+    this.h.run(
+      `INSERT INTO ${table}(${cols.join(",")},sync_status)
+       VALUES (${cols.map(() => "?").join(",")},'synced')
+       ON CONFLICT(id) DO UPDATE SET ${assignments.join(",")}, sync_status='synced'`,
+      cols.map((c) => row[c] ?? null),
+    );
+  }
+
+  /** The queue in insertion order — the order it must drain in. */
+  peekSyncQueue(limit: number): SyncQueueItem[] {
+    return this.h.rows(
+      `SELECT * FROM sync_queue ORDER BY id LIMIT ?`, [limit],
+    ).map((r) => ({
+      id: Number(r.id),
+      tableName: r.table_name as SyncTable,
+      recordId: String(r.record_id),
+      operation: r.operation as SyncOperation,
+      payload: JSON.parse(String(r.payload)) as Record<string, unknown>,
+      attempts: Number(r.attempts),
+      lastError: (r.last_error as string) ?? null,
+      createdAt: String(r.created_at),
+    }));
+  }
+
+  /** A queue item that reached the server: drop it, mark the row synced. */
+  resolveSyncItem(queueId: number, table: SyncTable, recordId: string): void {
+    this.db.transaction(() => {
+      this.h.run(`DELETE FROM sync_queue WHERE id=?`, [queueId]);
+      // Only if nothing newer is still queued for the same row — otherwise
+      // "synced" would be a lie about the version now on disk.
+      const stillQueued = Number(this.h.one(
+        `SELECT COUNT(*) FROM sync_queue WHERE table_name=? AND record_id=?`, [table, recordId],
+      ));
+      if (!stillQueued) {
+        this.h.run(`UPDATE ${table} SET sync_status='synced' WHERE id=?`, [recordId]);
+      }
+    });
+  }
+
+  /**
+   * A push that failed. Network failures leave the item queued to retry;
+   * a server rejection is a conflict, which is recorded on the row and
+   * surfaced rather than dropped (§7.1, non-negotiable #6).
+   */
+  failSyncItem(queueId: number, message: string, kind: "retry" | "conflict"): void {
+    this.db.transaction(() => {
+      this.h.run(
+        `UPDATE sync_queue SET attempts=attempts+1, last_error=? WHERE id=?`, [message, queueId],
+      );
+      if (kind === "conflict") {
+        const rows = this.h.rows(`SELECT table_name, record_id FROM sync_queue WHERE id=?`, [queueId]);
+        if (rows.length) {
+          const table = String(rows[0].table_name) as SyncTable;
+          this.h.run(`UPDATE ${table} SET sync_status='conflict' WHERE id=?`, [String(rows[0].record_id)]);
+        }
+      }
+    });
+  }
+
+  /** Rows the server rejected, for the UI to surface rather than bury. */
+  getConflictCount(): number {
+    return (["habits", "routines", "entries"] as SyncTable[]).reduce(
+      (n, t) => n + Number(this.h.one(`SELECT COUNT(*) FROM ${t} WHERE sync_status='conflict'`)),
+      0,
+    );
+  }
+
+  /**
+   * Drops tombstones older than 90 days, but only ones the server has
+   * acknowledged (§6). Purging an unsynced tombstone would let the row
+   * come back on the next pull, which is the exact bug tombstones exist
+   * to prevent.
+   */
+  purgeTombstones(olderThan: string): number {
+    let removed = 0;
+    this.db.transaction(() => {
+      for (const table of ["entries", "habits", "routines"] as SyncTable[]) {
+        const ids = this.h.rows(
+          `SELECT id FROM ${table}
+           WHERE deleted_at IS NOT NULL AND deleted_at < ? AND sync_status='synced'
+             AND id NOT IN (SELECT record_id FROM sync_queue WHERE table_name=?)`,
+          [olderThan, table],
+        ).map((r) => String(r.id));
+        if (!ids.length) continue;
+        this.h.run(
+          `DELETE FROM ${table} WHERE id IN (${ids.map(() => "?").join(",")})`, ids,
+        );
+        removed += ids.length;
+      }
+    });
+    return removed;
+  }
+
   // ── Test-only seams ─────────────────────────────────────────────────
+  /** Entries as the app sees them — tombstones excluded, like every read. */
   __dumpEntries(): Entry[] {
-    return this.h.rows(`SELECT * FROM entries ORDER BY habit_id, date`).map(toEntry);
+    return this.h.rows(
+      `SELECT * FROM entries WHERE deleted_at IS NULL ORDER BY habit_id, date`,
+    ).map(toEntry);
+  }
+
+  /** Raw rows including tombstones, so a test can prove one exists. */
+  __dumpRaw(table: SyncTable): Record<string, unknown>[] {
+    return this.h.rows(`SELECT * FROM ${table} ORDER BY id`);
   }
 
   /** See Db.__rawInsertEntry — deliberately omits ON CONFLICT. */

@@ -11,10 +11,12 @@ import {
 } from "./repository.js";
 import { __setTestClock } from "./clock.js";
 import { serializeError } from "./errors.js";
+import { SyncEngine, configFromEnv } from "./sync.js";
 import type { RpcRequest, RpcResponse } from "./protocol.js";
 import type { VfsInfo } from "./types.js";
 
 let repo: Repository | null = null;
+let sync: SyncEngine | null = null;
 let initError: string | null = null;
 let storage: VfsInfo | null = null;
 
@@ -99,6 +101,12 @@ const ready = (async () => {
     const pool = await installPool(sqlite3);
     const db = new pool.OpfsSAHPoolDb("/habits.sqlite3") as unknown as SqlDb;
     repo = new Repository(db);
+    // Constructed whether or not Supabase is configured. An unconfigured
+    // engine is inert and reports "offline", which is the truth: there is
+    // nowhere for the queue to drain to. It still counts what is waiting,
+    // so nothing is silently lost while the backend is being set up.
+    sync = new SyncEngine(repo, configFromEnv(import.meta.env as unknown as Record<string, string | undefined>));
+    sync.start();
     storage = {
       // Read back from the running VFS rather than hardcoded, so the gate
       // report states what the database actually opened on.
@@ -110,6 +118,18 @@ const ready = (async () => {
   }
 })();
 
+/**
+ * Methods that change data. After one succeeds the sync engine is nudged,
+ * so a push follows a burst of taps rather than each individual one
+ * (§7.4). Listed rather than inferred: a new mutation should have to
+ * declare itself, not be guessed at by name.
+ */
+const MUTATIONS = new Set([
+  "createRoutine", "updateRoutine", "archiveRoutine", "deleteRoutine", "reorderRoutines",
+  "createHabit", "updateHabit", "archiveHabit", "unarchiveHabit", "deleteHabit", "reorderHabits",
+  "setEntry", "deleteEntry",
+]);
+
 function dispatch(method: string, args: unknown[]): unknown {
   switch (method) {
     case "__setTestClock": __setTestClock(args[0] as number | null); return undefined;
@@ -120,18 +140,33 @@ function dispatch(method: string, args: unknown[]): unknown {
       return storage;
   }
 
-  if (!repo) throw new Error(initError ?? "database is not initialized");
+  if (!repo || !sync) throw new Error(initError ?? "database is not initialized");
+
+  switch (method) {
+    // §8 — the whole of what anything above Layer 1 may know about sync.
+    case "getSyncState": return sync.getSyncState();
+    case "getPendingCount": return sync.getPendingCount();
+    // Test seams. __configureSync points the engine at a server; without
+    // it the engine is inert, which is what an unconfigured build wants.
+    case "__configureSync": sync.setConfig(args[0] as never); return undefined;
+    case "__syncNow": return sync.run();
+    case "__dumpSyncQueue": return repo.peekSyncQueue(10_000);
+  }
+
   const fn = (repo as unknown as Record<string, ((...a: unknown[]) => unknown) | undefined>)[method];
   if (typeof fn !== "function") throw new Error(`unknown method: ${method}`);
 
+  let result: unknown;
   try {
-    return fn.apply(repo, args);
+    result = fn.apply(repo, args);
   } catch (err) {
     // Typed errors pass through untouched; anything else is a raw SQLite
     // failure that needs classifying before it reaches the caller.
     if (err instanceof Error && TYPED_ERRORS.has(err.name)) throw err;
     translateSqlError(err);
   }
+  if (MUTATIONS.has(method)) sync.nudge();
+  return result;
 }
 
 self.onmessage = async (ev: MessageEvent<RpcRequest>) => {
@@ -139,7 +174,9 @@ self.onmessage = async (ev: MessageEvent<RpcRequest>) => {
   await ready;
   const post = (r: RpcResponse) => (self as unknown as Worker).postMessage(r);
   try {
-    post({ id, ok: true, result: dispatch(method, args) });
+    // A sync run is the one dispatch that is genuinely asynchronous;
+    // awaiting unconditionally keeps the two cases identical from here.
+    post({ id, ok: true, result: await dispatch(method, args) });
   } catch (err) {
     post({ id, ok: false, error: serializeError(err) });
   }

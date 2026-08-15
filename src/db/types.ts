@@ -70,6 +70,13 @@ export interface StorageInfo extends VfsInfo {
   persistRequested: boolean;
 }
 
+/**
+ * Layer 1b §8. `pending` means there is local work not yet on the server;
+ * `offline` means there is no connection to send it over; `error` means a
+ * push was refused and a human needs to know.
+ */
+export type SyncState = "synced" | "pending" | "offline" | "error";
+
 export interface CreateRoutineInput {
   name: string;
   icon?: string | null;
@@ -136,6 +143,12 @@ export interface Db {
   /** Where the data is stored and whether it is safe from eviction. */
   getStorageInfo(): Promise<StorageInfo>;
 
+  // ── Sync, as far as anything above Layer 1 is allowed to see it ─────
+  // Layer 1b §8: exactly two facts, and no more. The queue, tombstones,
+  // sync_status and conflict resolution stay inside.
+  getSyncState(): Promise<SyncState>;
+  getPendingCount(): Promise<number>;
+
   // ── Test-only seams. Never called by application code. ──────────────
   /** Pins the Worker's clock; null restores the real one. */
   __setTestClock(ms: number | null): Promise<void>;
@@ -151,4 +164,29 @@ export interface Db {
    * never produce the violation the spec requires be *proven*.
    */
   __rawInsertEntry(habitId: string, date: string, value: number): Promise<void>;
+  /** Raw rows INCLUDING tombstones, so a test can prove one exists. */
+  __dumpRaw(table: "habits" | "routines" | "entries"): Promise<Record<string, unknown>[]>;
+  /** The sync queue in insertion order. */
+  __dumpSyncQueue(): Promise<SyncQueueRow[]>;
+  /** Runs one push/pull cycle and reports what happened. */
+  __syncNow(): Promise<SyncRunResult>;
+}
+
+export interface SyncQueueRow {
+  id: number;
+  tableName: "habits" | "routines" | "entries";
+  recordId: string;
+  operation: "upsert" | "delete";
+  payload: Record<string, unknown>;
+  attempts: number;
+  lastError: string | null;
+  createdAt: string;
+}
+
+export interface SyncRunResult {
+  pushed: number;
+  pulled: number;
+  conflicts: number;
+  /** Why the run stopped early, if it did. */
+  error: string | null;
 }

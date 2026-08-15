@@ -40,6 +40,26 @@ export class IllegalStateChangeError extends Error {
   }
 }
 
+/**
+ * Layer 1b §7.5. Names both sides of the collision and which one won, so
+ * a lost edit is explainable rather than merely gone.
+ */
+export class SyncConflictError extends Error {
+  constructor(
+    readonly table: string,
+    readonly recordId: string,
+    readonly localUpdatedAt: string,
+    readonly remoteUpdatedAt: string,
+    readonly winner: "local" | "remote",
+  ) {
+    super(
+      `SyncConflictError: ${table}/${recordId} — local ${localUpdatedAt} vs ` +
+      `remote ${remoteUpdatedAt}; ${winner} won`,
+    );
+    this.name = "SyncConflictError";
+  }
+}
+
 export interface SerializedError {
   name: string;
   message: string;
@@ -52,6 +72,16 @@ export function serializeError(err: unknown): SerializedError {
   if (err instanceof ConstraintError) return { name: err.name, message: err.message, extra: { constraint: err.constraint } };
   if (err instanceof ConfirmationRequiredError) return { name: err.name, message: err.message, extra: { action: err.action } };
   if (err instanceof IllegalStateChangeError) return { name: err.name, message: err.message, extra: { field: err.field } };
+  if (err instanceof SyncConflictError) {
+    return {
+      name: err.name,
+      message: err.message,
+      extra: {
+        table: err.table, recordId: err.recordId, localUpdatedAt: err.localUpdatedAt,
+        remoteUpdatedAt: err.remoteUpdatedAt, winner: err.winner,
+      },
+    };
+  }
   if (err instanceof Error) return { name: err.name || "Error", message: err.message, extra: {} };
   return { name: "Error", message: String(err), extra: {} };
 }
@@ -62,6 +92,7 @@ const PROTOTYPES: Record<string, object> = {
   ConstraintError: ConstraintError.prototype,
   ConfirmationRequiredError: ConfirmationRequiredError.prototype,
   IllegalStateChangeError: IllegalStateChangeError.prototype,
+  SyncConflictError: SyncConflictError.prototype,
 };
 
 export function reviveError(s: SerializedError): Error {

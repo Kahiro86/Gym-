@@ -44,24 +44,38 @@ async function main() {
   //    before anything else writes here. ══════════════════════════════
   const fresh = await openApp(browser, { timezoneId: "UTC" });
 
-  await t("30. migration runner brings an empty database to v1; a second run is a no-op", async () => {
+  // The literal "1" these two tests originally asserted was simply the
+  // latest migration at the time. Layer 1b §4 adds migration 2, so a
+  // hardcoded 1 now asserts that the schema never advances — the opposite
+  // of what a forward-only runner is for. LATEST_SCHEMA preserves the
+  // claim the tests exist to make: the runner reaches the newest version,
+  // and running it again changes nothing.
+  const LATEST_SCHEMA = "2";
+
+  await t("30. migration runner brings an empty database up to date; a second run is a no-op", async () => {
     const first = await fresh.page.evaluate(() => window.__db.getMeta("schema_version"));
-    assert(first === "1", `expected '1' after first load, got ${first}`);
+    assert(first === LATEST_SCHEMA, `expected '${LATEST_SCHEMA}' after first load, got ${first}`);
     // Reloading re-runs the worker bootstrap (and runMigrations) against
     // the now-populated database.
     await fresh.page.reload();
     await fresh.page.waitForFunction(() => !!window.__db, null, { timeout: 20000 });
     const second = await fresh.page.evaluate(() => window.__db.getMeta("schema_version"));
-    assert(second === "1", `expected '1' after a second bootstrap, got ${second}`);
+    assert(second === LATEST_SCHEMA, `expected '${LATEST_SCHEMA}' after a second bootstrap, got ${second}`);
   });
 
-  await t("31. meta is seeded on first run with schema_version=1 and day_start_hour=4", async () => {
+  await t("31. meta is seeded on first run: schema version, day_start_hour=4, a device id", async () => {
     const r = await fresh.page.evaluate(async () => ({
       sv: await window.__db.getMeta("schema_version"),
       dsh: await window.__db.getDayStartHour(),
+      device: await window.__db.getMeta("device_id"),
+      lastPull: await window.__db.getMeta("last_pull_at"),
     }));
-    assert(r.sv === "1", `schema_version = ${r.sv}`);
+    assert(r.sv === LATEST_SCHEMA, `schema_version = ${r.sv}`);
     assert(r.dsh === 4, `day_start_hour = ${r.dsh}`);
+    assert(/^[0-9a-f-]{36}$/.test(r.device ?? ""), `device_id is not a uuid: ${r.device}`);
+    // §4.3: last_pull_at stays absent until a pull actually succeeds.
+    // "Never pulled" and "pulled, found nothing" are different facts.
+    assert(r.lastPull === null, `last_pull_at should be unset before any pull, got ${r.lastPull}`);
   });
 
   assert(fresh.errors.length === 0, `console errors: ${fresh.errors.join("; ")}`);
