@@ -11,7 +11,7 @@ the 4am day-start, the tri-state entry model, `UNIQUE(habit_id, date)`.
 ## Layer 2 — logic — DONE
 Scores, streaks, trends, history, heatmap, and the three screens' view
 models. Pure core plus a thin async facade, so the arithmetic is testable
-without a browser. 188 unit tests, 17 integration tests.
+without a browser. 198 unit tests, 17 integration tests.
 
 ## Layer 3 — UI
 - Screen 1 (list) — DONE
@@ -83,7 +83,7 @@ without a browser. 188 unit tests, 17 integration tests.
 
 Every Layer 2 source and test that existed before Layer 1b is byte-identical
 to what it was then — that is §9.1's requirement, and it holds. Layer 2 has
-since *gained* `editor.ts` and its 28 unit tests, which is an addition for
+since *gained* `editor.ts` and 38 unit tests, which is an addition for
 the habit editor, not a change to anything Layer 1b touched.
 
 ## Next
@@ -118,8 +118,9 @@ Supabase provisioning, then the remaining §9.4 tests.
    §9.1's "unmodified", and it is a conflict between §9.1 and §4 rather
    than a weakened test.
 6. **Test counts differ from the spec's.** §9.1 cites 138 Layer 2 unit
-   tests and 17 integration tests; the suite has 188 and 17. The tests
-   were rewritten during the Opus 5 rebuild, and the editor added 28
+   tests and 17 integration tests; the suite has 198 and 17. The tests
+   were rewritten during the Opus 5 rebuild, and the editor and Screen 1's
+   menus added 38
    more. The binding requirement — the pre-Layer-1b Layer 2 tests pass
    with zero edits to Layer 2 — holds.
 7. **A habit editor was added, which no spec describes.** The build spec
