@@ -44,14 +44,20 @@ describe("buildListView cell states", () => {
     expect(build([]).groups[0].rows[0].cells[0].state).toEqual({ kind: "today" });
   });
 
-  it("leaves an unlogged PAST day blank rather than inviting a tap", () => {
-    expect(build([]).groups[0].rows[0].cells[1].state).toEqual({ kind: "blank" });
+  // These two asserted "blank" for an unlogged past day, matching Loop.
+  // On a real phone that is indistinguishable from a day the habit was
+  // never due, and it reads as though the cell is still waiting for a
+  // tap after the day has closed. The state is now "lapsed"; "blank"
+  // means only "not scheduled". Storage is unchanged either way — there
+  // is still no row.
+  it("marks a scheduled PAST day with nothing logged as lapsed", () => {
+    expect(build([]).groups[0].rows[0].cells[1].state).toEqual({ kind: "lapsed" });
   });
 
-  it("distinguishes an explicit miss from an untouched day", () => {
+  it("distinguishes an explicit miss from a day that simply lapsed", () => {
     const view = build([makeEntry("2026-08-13", 0, "h1")]);
     expect(view.groups[0].rows[0].cells[1].state.kind).toBe("missed");
-    expect(view.groups[0].rows[0].cells[2].state.kind).toBe("blank");
+    expect(view.groups[0].rows[0].cells[2].state.kind).toBe("lapsed");
   });
 
   it("shows the raw value for a numeric habit, with its unit", () => {
@@ -147,6 +153,68 @@ describe("buildListView grouping", () => {
   it("aligns every row's cells with the view's day columns", () => {
     const view = buildListView([], [makeHabit({ id: "h1" })], [], TODAY, days);
     expect(view.groups[0].rows[0].cells.map((c) => c.date)).toEqual(view.days);
+  });
+});
+
+describe("cell states over the calendar", () => {
+  const days = listDays(TODAY, 5);
+  const kinds = (v: ReturnType<typeof buildListView>) =>
+    v.groups[0].rows[0].cells.map((c) => c.state.kind);
+
+  it("a scheduled past day with nothing logged has lapsed, not gone blank", () => {
+    // Blank is what a day off looks like. A day that came and went
+    // without the habit being done is a different fact, and the list has
+    // to be able to say which is which.
+    const view = buildListView([], [makeHabit({ createdDate: "2026-01-01" })], [], TODAY, days);
+    expect(kinds(view)).toEqual(["today", "lapsed", "lapsed", "lapsed", "lapsed"]);
+  });
+
+  it("today stays open rather than lapsing", () => {
+    const view = buildListView([], [makeHabit({ createdDate: "2026-01-01" })], [], TODAY, days);
+    expect(view.groups[0].rows[0].cells[0].state.kind).toBe("today");
+  });
+
+  it("a day the habit is not due is blank, never lapsed", () => {
+    // Mon/Wed/Fri, over a window ending on Friday the 14th.
+    const mwf = makeHabit({ frequencyType: "specific_days", frequencyDays: [1, 3, 5], createdDate: "2026-01-01" });
+    const view = buildListView([], [mwf], [], TODAY, days);
+    const cells = view.groups[0].rows[0].cells;
+    for (const c of cells) {
+      if (!c.scheduled) expect(c.state.kind, c.date).toBe("blank");
+      else expect(c.state.kind, c.date).not.toBe("blank");
+    }
+  });
+
+  it("a completed past day shows as complete, not lapsed", () => {
+    // TODAY is 2026-08-14, so the columns run 14, 13, 12, 11, 10.
+    const view = buildListView(
+      [], [makeHabit({ createdDate: "2026-01-01" })], [makeEntry("2026-08-13", 1)], TODAY, days,
+    );
+    expect(kinds(view)).toEqual(["today", "complete", "lapsed", "lapsed", "lapsed"]);
+  });
+
+  it("an explicit miss stays distinct from a lapse", () => {
+    // The user chose to record 0 on the 13th; the 12th simply passed.
+    const view = buildListView(
+      [], [makeHabit({ createdDate: "2026-01-01" })], [makeEntry("2026-08-13", 0)], TODAY, days,
+    );
+    const cells = view.groups[0].rows[0].cells;
+    expect(cells.find((c) => c.date === "2026-08-13")!.state.kind).toBe("missed");
+    expect(cells.find((c) => c.date === "2026-08-12")!.state.kind).toBe("lapsed");
+  });
+
+  it("a future day in the window has not lapsed — it has not happened", () => {
+    const future = listDays("2026-08-18", 5); // window ends after TODAY
+    const view = buildListView([], [makeHabit({ createdDate: "2026-01-01" })], [], TODAY, future);
+    const cells = view.groups[0].rows[0].cells;
+    expect(cells.filter((c) => c.date > TODAY).every((c) => c.state.kind === "blank")).toBe(true);
+  });
+
+  it("a numeric habit shows its amount whatever the day", () => {
+    const water = makeHabit({ type: "numeric", target: 2, unit: "L", createdDate: "2026-01-01" });
+    const view = buildListView([], [water], [makeEntry("2026-08-13", 1.5)], TODAY, days);
+    const cell = view.groups[0].rows[0].cells.find((c) => c.date === "2026-08-13")!;
+    expect(cell.state).toEqual({ kind: "numeric", value: 1.5, unit: "L" });
   });
 });
 

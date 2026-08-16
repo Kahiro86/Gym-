@@ -82,10 +82,10 @@ has 17 integration tests.
 | Layer 1 acceptance (1-31) | 32/32 |
 | Layer 1 extended (32-60) | 32/32 |
 | Layer 2 integration | 17/17 |
-| Layer 2 and Layer 1 unit | 238/238 |
+| Layer 2 and Layer 1 unit | 245/245 |
 | Storage (§9.2) | 6/6 |
 | Sync (§9.2-9.3) | 11/11 |
-| Editor and Screen 1 | 21/21 |
+| Editor and Screen 1 | 26/26 |
 | Supabase (§9.4) | not run — no project |
 
 Every Layer 2 source and test that existed before Layer 1b is byte-identical
@@ -166,11 +166,13 @@ Supabase provisioning, then the remaining §9.4 tests.
 8. **CalendarScreen called `db.deleteEntry` directly**, bypassing Layer 2
    — a boundary violation from the Screen 3 work. It now goes through
    Layer 2's `deleteEntry`.
-9. **A scheduled day with nothing logged shows a faint dot.** Loop leaves
-   it entirely blank, which makes it indistinguishable from a day the
-   habit was never due and gives no hint that the cell is tappable. The
-   dot is far dimmer than today's gold ring, so the invitation to log
-   today still reads first.
+9. **A scheduled day that ended without being done shows a dash.** Loop
+   leaves it entirely blank, which is indistinguishable from a day the
+   habit was never due, and reads as though the cell is still waiting
+   after the day has closed. Layer 2 gained a `lapsed` cell state for
+   exactly this; `blank` now means only "not scheduled". Storage is
+   unchanged — there is still no row, and an explicit miss (value 0) is
+   still a separate state shown as an x.
 10. **The filter and overflow buttons do something.** The spec draws both
     and defines neither. Rendering a control that does nothing is worse
     than not drawing it, and they were reported as broken.
@@ -183,3 +185,8 @@ Supabase provisioning, then the remaining §9.4 tests.
     2099 both store; lexicographic order stays chronological for any
     four-digit year, so no limit is needed and any chosen one would be
     arbitrary.
+13. **Tapping a measurable habit's cell asks for the amount in place**,
+    rather than opening the detail screen. The original reasoning — a tap
+    cannot invent an amount — was right, but navigating away meant the
+    app's central gesture did nothing on a measurable habit. Only the
+    habit's name navigates now.

@@ -151,14 +151,15 @@
   border: 1.5px solid var(--accent-gold);
 }
 
-/* A scheduled day with nothing logged: faint, but present, so it is
-   visible as somewhere a tap belongs. Deliberately far dimmer than the
-   gold ring on today, which is the day being invited. */
-.cell__todo {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--cell-empty);
+/* A scheduled day that ended with nothing logged. A dash reads as
+   "closed, not done" — distinct from the x, which the user chose, and
+   from a day off, which shows nothing at all. */
+.cell__dash {
+  width: 9px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--text-secondary);
+  opacity: 0.7;
 }
 
 .cell__value {
@@ -343,3 +344,77 @@
   line-height: 1.45;
   color: var(--danger-red);
 }
+
+/* ── Amount entry for a measurable habit ─────────────────────────── */
+.amount {
+  position: relative;
+  z-index: 2;
+  margin: 8px 0;
+  padding: 12px 14px;
+  border: 0.5px solid var(--accent-gold);
+  border-radius: 14px;
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.amount__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.amount__name { font-size: 13px; color: var(--text-primary); }
+.amount__date { font-size: 11px; color: var(--text-secondary); }
+
+.amount__unit {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.amount__row { display: flex; gap: 8px; align-items: center; }
+
+/* Its own controls rather than the habit editor's: reusing those would
+   couple two screens through a stylesheet, which is how the habit grid
+   collapsed once already. */
+.amount__input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 15px;
+}
+
+.amount__input:focus { border-color: var(--accent-gold); outline: none; }
+.amount__input::placeholder { color: var(--text-secondary); }
+
+.amount__save {
+  flex: none;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 0.5px solid var(--accent-gold);
+  border-radius: 10px;
+  color: var(--accent-gold);
+  font-size: 13px;
+}
+
+.amount__action {
+  flex: 1;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 0.5px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.amount__save:disabled,
+.amount__action:disabled { opacity: 0.4; border-color: var(--border); color: var(--text-secondary); }

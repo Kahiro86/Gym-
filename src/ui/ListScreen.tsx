@@ -7,8 +7,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { db } from "../db/index.js";
 import {
-  getListView, toggleEntry, createRoutine, getDayStartHour, setDayStartHour,
-  getStorageSummary, checkEviction, DEFAULT_LIST_DAYS,
+  getListView, toggleEntry, setEntry, deleteEntry, createRoutine,
+  getDayStartHour, setDayStartHour, getStorageSummary, checkEviction, DEFAULT_LIST_DAYS,
 } from "../logic/index.js";
 import type {
   CellState, ListCell, ListGroup, ListOptions, ListRow, ListView, StorageSummary,
@@ -50,21 +50,21 @@ function cellDescription(habit: Habit, cell: ListCell): string {
     case "missed": return `${habit.name}, ${cell.date}: missed`;
     case "today": return `${habit.name}, today: not logged yet`;
     case "numeric": return `${habit.name}, ${cell.date}: ${cell.state.value}${habit.unit ? ` ${habit.unit}` : ""}`;
-    case "blank": return cell.scheduled
-      ? `${habit.name}, ${cell.date}: no entry`
-      : `${habit.name}, ${cell.date}: not scheduled`;
+    case "lapsed": return `${habit.name}, ${cell.date}: the day ended without this being done`;
+    case "blank": return `${habit.name}, ${cell.date}: not scheduled`;
   }
 }
 
-function CellContent({ state, unit, scheduled }: {
-  state: CellState;
-  unit: string | null;
-  scheduled: boolean;
-}) {
+function CellContent({ state, unit }: { state: CellState; unit: string | null }) {
   switch (state.kind) {
     case "complete": return <CheckIcon />;
+    // A miss the user recorded deliberately.
     case "missed": return <XIcon />;
     case "today": return <span className="cell__ring" />;
+    // The day ended with nothing logged. A dash, not a blank: the cell
+    // is not waiting for anything any more, and it is not the same as a
+    // day the habit was never due.
+    case "lapsed": return <span className="cell__dash" />;
     case "numeric":
       return (
         <span className="cell__value">
@@ -72,24 +72,90 @@ function CellContent({ state, unit, scheduled }: {
           {unit ? <span className="cell__unit">{unit}</span> : null}
         </span>
       );
-    // Loop leaves an unlogged past day completely blank. That reads as
-    // "nothing here" rather than "you can still fill this in", and a day
-    // the habit was never due looks identical to one you simply have not
-    // ticked yet. A faint dot on the scheduled days says which cells are
-    // yours to fill; a day off stays empty.
-    case "blank": return scheduled ? <span className="cell__todo" /> : null;
+    case "blank": return null;
   }
 }
 
-function HabitRow({ row, onToggle, onOpen }: {
+/**
+ * Inline amount entry for a measurable habit.
+ *
+ * Tapping such a cell used to open the habit's detail screen, on the
+ * reasoning that a tap cannot invent an amount. True, but the
+ * consequence was that the one gesture the app is built around did
+ * nothing on a measurable habit — it navigated away from the list. Asking
+ * for the number here keeps the tap where the user aimed it.
+ */
+function AmountEntry({ habit, date, current, onSave, onClear, onCancel }: {
+  habit: Habit;
+  date: string;
+  current: number | null;
+  onSave: (value: number) => void;
+  onClear: () => void;
+  onCancel: () => void;
+}) {
+  const [text, setText] = useState(current === null ? "" : String(current));
+  const value = Number(text);
+  const valid = text.trim() !== "" && Number.isFinite(value) && value >= 0;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  return (
+    <>
+      <div className="sheet__backdrop" onClick={onCancel} aria-hidden />
+      <div className="amount" role="dialog" aria-label={`${habit.name} on ${date}`}>
+        <div className="amount__head">
+          <span className="amount__name">{habit.name}</span>
+          <span className="amount__date">{date}</span>
+        </div>
+        <div className="amount__row">
+          <input
+            className="amount__input"
+            inputMode="decimal"
+            autoFocus
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && valid) onSave(value); }}
+            aria-label={`Amount${habit.unit ? ` in ${habit.unit}` : ""}`}
+            placeholder={habit.target == null ? "" : String(habit.target)}
+          />
+          {habit.unit ? <span className="amount__unit">{habit.unit}</span> : null}
+          <button type="button" className="amount__save" disabled={!valid} onClick={() => onSave(value)}>
+            Save
+          </button>
+        </div>
+        <div className="amount__row">
+          {/* 0 is a real answer, not an empty one: it records that the
+              day was missed on purpose. Kept separate from Clear. */}
+          <button type="button" className="amount__action" onClick={() => onSave(0)}>
+            Mark as missed
+          </button>
+          <button
+            type="button"
+            className="amount__action"
+            disabled={current === null}
+            onClick={onClear}
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function HabitRow({ row, onToggle, onOpen, onEnterAmount }: {
   row: ListRow;
   onToggle: (habitId: string, date: string) => void;
   onOpen: (habit: Habit) => void;
+  onEnterAmount: (habit: Habit, cell: ListCell) => void;
 }) {
   const { habit, cells } = row;
-  // Boolean cells cycle in place. A numeric cell cannot — it needs an
-  // amount, and inventing one on tap would be fabricating data — so it
-  // opens the habit instead, where a value can actually be entered.
+  // A boolean cell cycles in place; a measurable one asks for the
+  // amount. Neither navigates — only the habit's name does that.
   const cycles = habit.type === "boolean";
 
   const archived = habit.archivedAt !== null;
@@ -110,16 +176,23 @@ function HabitRow({ row, onToggle, onOpen }: {
           cell.state.kind === "missed" ? "cell--missed" : "",
           cell.scheduled ? "" : "cell--off",
         ].filter(Boolean).join(" ");
-        const content = <CellContent state={cell.state} unit={habit.unit} scheduled={cell.scheduled} />;
+        const content = <CellContent state={cell.state} unit={habit.unit} />;
         const label = cellDescription(habit, cell);
+        // A day the habit was never due has nothing to record.
+        const actionable = cell.scheduled;
 
         return (
           <button
             key={cell.date}
             type="button"
             className={className}
-            aria-label={cycles ? label : `${label}. Opens ${habit.name} to enter a value.`}
-            onClick={() => (cycles ? onToggle(habit.id, cell.date) : onOpen(habit))}
+            disabled={!actionable}
+            aria-label={actionable && !cycles ? `${label}. Enter an amount.` : label}
+            onClick={() => {
+              if (!actionable) return;
+              if (cycles) onToggle(habit.id, cell.date);
+              else onEnterAmount(habit, cell);
+            }}
           >
             {content}
           </button>
@@ -129,12 +202,13 @@ function HabitRow({ row, onToggle, onOpen }: {
   );
 }
 
-function Group({ group, collapsed, onToggleCollapse, onToggle, onOpen }: {
+function Group({ group, collapsed, onToggleCollapse, onToggle, onOpen, onEnterAmount }: {
   group: ListGroup;
   collapsed: boolean;
   onToggleCollapse: () => void;
   onToggle: (habitId: string, date: string) => void;
   onOpen: (habit: Habit) => void;
+  onEnterAmount: (habit: Habit, cell: ListCell) => void;
 }) {
   const name = group.routine?.name ?? "Habits";
   const groupId = group.routine?.id ?? "loose";
@@ -152,7 +226,13 @@ function Group({ group, collapsed, onToggleCollapse, onToggle, onOpen }: {
       </button>
       <div id={`group-${groupId}`} hidden={collapsed}>
         {group.rows.map((row) => (
-          <HabitRow key={row.habit.id} row={row} onToggle={onToggle} onOpen={onOpen} />
+          <HabitRow
+            key={row.habit.id}
+            row={row}
+            onToggle={onToggle}
+            onOpen={onOpen}
+            onEnterAmount={onEnterAmount}
+          />
         ))}
       </div>
     </>
@@ -357,6 +437,7 @@ export function ListScreen({ onOpenHabit, onAddHabit }: {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [writeError, setWriteError] = useState<Error | null>(null);
   const [evicted, setEvicted] = useState<EvictionReport | null>(null);
+  const [amount, setAmount] = useState<{ habit: Habit; cell: ListCell } | null>(null);
   const filtering = !!options.includeArchived || !!options.hideCompletedToday;
 
   const { reload } = view;
@@ -378,6 +459,20 @@ export function ListScreen({ onOpenHabit, onAddHabit }: {
   useEffect(() => {
     checkEviction(db).then(setEvicted, () => setEvicted(null));
   }, []);
+
+  const closeAmount = useCallback(() => setAmount(null), []);
+
+  /** One path for every amount-entry outcome, so all three report failure. */
+  const writeAmount = useCallback(async (fn: () => Promise<unknown>) => {
+    try {
+      setWriteError(null);
+      await fn();
+      setAmount(null);
+      reload();
+    } catch (err) {
+      setWriteError(err instanceof Error ? err : new Error(String(err)));
+    }
+  }, [reload]);
 
   const days = view.status === "ready" ? view.data.days : Array.from({ length: dayCount }, (_, i) => String(i));
   const today = view.status === "ready" ? view.data.today : null;
@@ -444,6 +539,17 @@ export function ListScreen({ onOpenHabit, onAddHabit }: {
         </div>
       )}
 
+      {amount && (
+        <AmountEntry
+          habit={amount.habit}
+          date={amount.cell.date}
+          current={amount.cell.state.kind === "numeric" ? amount.cell.state.value : null}
+          onSave={(value) => void writeAmount(() => setEntry(db, amount.habit.id, amount.cell.date, value))}
+          onClear={() => void writeAmount(() => deleteEntry(db, amount.habit.id, amount.cell.date))}
+          onCancel={closeAmount}
+        />
+      )}
+
       {view.status === "loading" && <Skeleton dayCount={dayCount} />}
 
       {view.status === "error" && (
@@ -503,6 +609,7 @@ export function ListScreen({ onOpenHabit, onAddHabit }: {
             onToggleCollapse={() => setCollapsed((c) => ({ ...c, [key]: !(c[key] ?? false) }))}
             onToggle={handleToggle}
             onOpen={onOpenHabit}
+            onEnterAmount={(habit, cell) => setAmount({ habit, cell })}
           />
         );
       })}

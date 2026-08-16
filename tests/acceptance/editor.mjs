@@ -317,19 +317,122 @@ async function main() {
     return `${r.cells.length} cells centred on their headers; name column ${r.nameWidth.toFixed(0)}px`;
   });
 
-  await t("a scheduled day with nothing logged is visibly tappable", async () => {
+  await t("a scheduled day that ended without being done shows a dash", async () => {
     const r = await withApp(async (page) => {
       await createByHand(page, { name: "Daily" });
       return page.evaluate(() => ({
-        // Today gets the gold ring; the four past days are scheduled but
-        // unlogged, and must not be indistinguishable from a day off.
+        // Today gets the gold ring; the four days behind it have closed
+        // with nothing logged, and must not look like days off.
         rings: document.querySelectorAll(".cell__ring").length,
-        todo: document.querySelectorAll(".cell__todo").length,
+        dashes: document.querySelectorAll(".cell__dash").length,
       }));
     });
     assert(r.rings === 1, `expected one ring on today, found ${r.rings}`);
-    assert(r.todo === 4, `expected four tappable past days marked, found ${r.todo}`);
-    return "today ringed, the other four scheduled days marked";
+    assert(r.dashes === 4, `expected four lapsed days dashed, found ${r.dashes}`);
+    return "today ringed, the four days behind it dashed";
+  });
+
+  await t("ticking today turns the ring into a tick, and untick returns the ring", async () => {
+    const r = await withApp(async (page) => {
+      await createByHand(page, { name: "Daily" });
+      const cell = page.locator(".grid.row").first().locator(".cell").first();
+      const shape = () => cell.evaluate((el) => {
+        if (el.querySelector(".cell__ring")) return "ring";
+        if (el.querySelector(".cell__dash")) return "dash";
+        if (el.querySelector("svg")) return el.classList.contains("cell--missed") ? "cross" : "tick";
+        return "empty";
+      });
+      const seen = [await shape()];
+      // The tri-state cycle, as a person sees it.
+      for (let i = 0; i < 3; i++) { await cell.click(); await page.waitForTimeout(450); seen.push(await shape()); }
+      return { seen, stored: await page.evaluate(() => window.__db.__dumpEntries()) };
+    });
+    assert(r.seen.join(" → ") === "ring → tick → cross → ring",
+      `the cycle was ${r.seen.join(" → ")}`);
+    assert(r.stored.length === 0, "the third tap left a row behind");
+    return r.seen.join(" → ");
+  });
+
+  await t("tapping a cell never navigates away from the list", async () => {
+    // The reported bug: on a measurable habit, tapping the day opened
+    // the analytics screen instead of logging anything.
+    const r = await withApp(async (page) => {
+      await createByHand(page, { name: "Water", type: "Measurable", target: "2", unit: "L" });
+      await page.locator(".grid.row").first().locator(".cell").first().click();
+      await page.waitForTimeout(500);
+      return {
+        stillOnList: await page.locator(".topbar__title").count(),
+        onDetail: await page.locator(".detail-topbar").count(),
+        asksForAmount: await page.locator(".amount").count(),
+      };
+    });
+    assert(r.stillOnList === 1, "tapping a cell left the list screen");
+    assert(r.onDetail === 0, "tapping a cell opened the detail screen");
+    assert(r.asksForAmount === 1, "no amount was asked for, so the tap did nothing");
+    return "the tap asks for the amount, in place";
+  });
+
+  await t("a measurable amount can be entered, changed and cleared from the list", async () => {
+    const r = await withApp(async (page) => {
+      await createByHand(page, { name: "Water", type: "Measurable", target: "2", unit: "L" });
+      const cell = () => page.locator(".grid.row").first().locator(".cell").first();
+
+      await cell().click();
+      await page.getByLabel("Amount in L").fill("1.5");
+      await page.getByText("Save", { exact: true }).click();
+      await page.waitForTimeout(500);
+      const first = await cell().innerText();
+
+      await cell().click();
+      await page.getByLabel("Amount in L").fill("2.5");
+      await page.getByText("Save", { exact: true }).click();
+      await page.waitForTimeout(500);
+      const changed = await cell().innerText();
+
+      await cell().click();
+      await page.getByText("Clear", { exact: true }).click();
+      await page.waitForTimeout(500);
+
+      return {
+        first, changed,
+        cleared: await page.evaluate(() => window.__db.__dumpEntries()),
+        ring: await cell().locator(".cell__ring").count(),
+      };
+    });
+    assert(/1\.5/.test(r.first), `the amount did not appear: ${JSON.stringify(r.first)}`);
+    assert(/2\.5/.test(r.changed), `the amount did not change: ${JSON.stringify(r.changed)}`);
+    assert(r.cleared.length === 0, `clearing left ${r.cleared.length} rows`);
+    assert(r.ring === 1, "after clearing, today is not offered again");
+    return `1.5 → 2.5 → cleared, and today is open again`;
+  });
+
+  await t("'Mark as missed' records a real zero, not an absence", async () => {
+    const r = await withApp(async (page) => {
+      await createByHand(page, { name: "Water", type: "Measurable", target: "2", unit: "L" });
+      await page.locator(".grid.row").first().locator(".cell").first().click();
+      await page.getByText("Mark as missed").click();
+      await page.waitForTimeout(500);
+      return page.evaluate(() => window.__db.__dumpEntries());
+    });
+    // The tri-state model: 0 is information, no row is not.
+    assert(r.length === 1, `expected one row, got ${r.length}`);
+    assert(r[0].value === 0, `expected value 0, got ${r[0].value}`);
+    return "stored as value 0, distinct from having no row";
+  });
+
+  await t("tapping the habit name is the only thing that opens the detail screen", async () => {
+    const r = await withApp(async (page) => {
+      await createByHand(page, { name: "Water", type: "Measurable", target: "2", unit: "L" });
+      await page.locator(".row__name").first().click();
+      // The title is a placeholder until the header's own read lands.
+      await page.waitForFunction(
+        () => document.querySelector(".detail-topbar__title")?.textContent === "Water",
+        null, { timeout: 15000 },
+      );
+      return page.locator(".detail-topbar__title").innerText();
+    });
+    assert(r === "Water", `the detail screen opened on ${JSON.stringify(r)}`);
+    return "the name navigates; the cells do not";
   });
 
   await t("a day the habit is not due carries no mark at all", async () => {
@@ -347,12 +450,15 @@ async function main() {
       return page.evaluate(() => ({
         off: document.querySelectorAll(".cell--off").length,
         offWithMark: [...document.querySelectorAll(".cell--off")]
-          .filter((c) => c.querySelector(".cell__todo, .cell__ring")).length,
+          .filter((c) => c.querySelector(".cell__dash, .cell__ring")).length,
+        // A day off is not a control: it must not be tappable either.
+        offEnabled: [...document.querySelectorAll(".cell--off")].filter((c) => !c.disabled).length,
       }));
     });
     assert(r.off >= 4, `expected at least four days off, found ${r.off}`);
     assert(r.offWithMark === 0, `${r.offWithMark} days off were marked as if they were tappable`);
-    return `${r.off} days off, none of them marked`;
+    assert(r.offEnabled === 0, `${r.offEnabled} days off were still tappable`);
+    return `${r.off} days off, none marked, none tappable`;
   });
 
   await t("the filter hides habits done today, and says the list is filtered", async () => {

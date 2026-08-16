@@ -13,11 +13,20 @@ import { isCompleted } from "./completion.js";
 /** What a single day-cell shows. Spec §5, Screen 1. */
 export type CellState =
   | { kind: "complete" }
+  /** Explicitly recorded as not done — the user tapped to say so. */
   | { kind: "missed" }
   /** Scheduled for today and not yet logged — the tappable gold ring. */
   | { kind: "today" }
+  /**
+   * A scheduled day that has ended with nothing logged. Distinct from
+   * "missed", which the user chose, and from "today", which is still
+   * open. Storage is unchanged — there is still no row — but the day is
+   * over, and showing it as though it were still fillable is a lie about
+   * the calendar.
+   */
+  | { kind: "lapsed" }
   | { kind: "numeric"; value: number; unit: string | null }
-  /** Nothing to show: an unlogged past day, or a day off. */
+  /** A day this habit was never due. */
   | { kind: "blank" };
 
 export interface ListCell {
@@ -77,8 +86,11 @@ function cellState(habit: Habit, entry: Entry | undefined, date: string, today: 
   // An unlogged day only invites a tap if the habit is actually due
   // today. Offering the ring on a day off would prompt the user to log
   // something the schedule never asked for.
-  if (date === today && scheduled) return { kind: "today" };
-  return { kind: "blank" };
+  if (!scheduled) return { kind: "blank" };
+  if (date === today) return { kind: "today" };
+  // Future days can appear in a range a caller asks for; they have not
+  // lapsed, they simply have not happened.
+  return date < today ? { kind: "lapsed" } : { kind: "blank" };
 }
 
 /**
