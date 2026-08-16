@@ -149,3 +149,74 @@ describe("buildListView grouping", () => {
     expect(view.groups[0].rows[0].cells.map((c) => c.date)).toEqual(view.days);
   });
 });
+
+describe("list filters", () => {
+  const days = listDays(TODAY, 5);
+  const names = (v: ReturnType<typeof buildListView>) => v.groups.flatMap((g) => g.rows.map((r) => r.habit.name));
+
+  it("shows everything when no filter is set", () => {
+    const habits = [
+      makeHabit({ id: "a", name: "Done" }),
+      makeHabit({ id: "b", name: "Not done" }),
+    ];
+    const view = buildListView([], habits, [makeEntry(TODAY, 1, "a")], TODAY, days);
+    expect(names(view)).toEqual(["Done", "Not done"]);
+  });
+
+  it("hideCompletedToday drops a habit completed today", () => {
+    // The case that silently did nothing: the lookup key was built with
+    // a space where the rest of the file uses a NUL separator, so the
+    // entry was never found and every habit looked outstanding.
+    const habits = [
+      makeHabit({ id: "a", name: "Done" }),
+      makeHabit({ id: "b", name: "Not done" }),
+    ];
+    const view = buildListView([], habits, [makeEntry(TODAY, 1, "a")], TODAY, days, { hideCompletedToday: true });
+    expect(names(view)).toEqual(["Not done"]);
+  });
+
+  it("hideCompletedToday keeps a habit explicitly marked as missed", () => {
+    // A recorded miss is not a completion — the day is still outstanding.
+    const habits = [makeHabit({ id: "a", name: "Missed" })];
+    const view = buildListView([], habits, [makeEntry(TODAY, 0, "a")], TODAY, days, { hideCompletedToday: true });
+    expect(names(view)).toEqual(["Missed"]);
+  });
+
+  it("hideCompletedToday ignores a completion on an earlier day", () => {
+    const habits = [makeHabit({ id: "a", name: "Yesterday only" })];
+    const view = buildListView([], habits, [makeEntry("2026-08-13", 1, "a")], TODAY, days, { hideCompletedToday: true });
+    expect(names(view)).toEqual(["Yesterday only"]);
+  });
+
+  it("hideCompletedToday judges a numeric habit against its target", () => {
+    const habits = [
+      makeHabit({ id: "a", name: "Under", type: "numeric", target: 2, unit: "L" }),
+      makeHabit({ id: "b", name: "Over", type: "numeric", target: 2, unit: "L" }),
+    ];
+    const view = buildListView(
+      [], habits, [makeEntry(TODAY, 1, "a"), makeEntry(TODAY, 3, "b")], TODAY, days,
+      { hideCompletedToday: true },
+    );
+    expect(names(view)).toEqual(["Under"]);
+  });
+
+  it("hideCompletedToday respects an at_most target", () => {
+    // "No more than one coffee": one is a success, so it drops out.
+    const habits = [
+      makeHabit({ id: "a", name: "Within", type: "numeric", target: 1, targetDirection: "at_most" }),
+      makeHabit({ id: "b", name: "Over", type: "numeric", target: 1, targetDirection: "at_most" }),
+    ];
+    const view = buildListView(
+      [], habits, [makeEntry(TODAY, 1, "a"), makeEntry(TODAY, 4, "b")], TODAY, days,
+      { hideCompletedToday: true },
+    );
+    expect(names(view)).toEqual(["Over"]);
+  });
+
+  it("drops a group the filter empties, rather than leaving a bare heading", () => {
+    const routine = makeRoutine({ id: "r" });
+    const habits = [makeHabit({ id: "a", name: "Only one", routineId: "r" })];
+    const view = buildListView([routine], habits, [makeEntry(TODAY, 1, "a")], TODAY, days, { hideCompletedToday: true });
+    expect(view.groups).toEqual([]);
+  });
+});

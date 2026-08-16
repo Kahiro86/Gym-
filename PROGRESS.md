@@ -22,6 +22,10 @@ without a browser. 188 unit tests, 17 integration tests.
   behind it and the app could only ever be empty. Create, edit, archive
   and delete, reached from the "+", the empty state and the detail
   screen's pencil.
+- Screen 1's filter and overflow menus — DONE. Also not in the spec,
+  which draws both icons but defines no behaviour. Filter: show archived,
+  hide done today. Overflow: new group, the day-start hour, and where the
+  data is stored.
 - Deployed to GitHub Pages, gated on the full test suite.
 
 ## Layer 1b — sync — IN PROGRESS
@@ -71,10 +75,10 @@ without a browser. 188 unit tests, 17 integration tests.
 |---|---|
 | Layer 1 acceptance | 32/32 |
 | Layer 2 integration | 17/17 |
-| Layer 2 unit | 188/188 |
+| Layer 2 unit | 198/198 |
 | Storage (§9.2) | 6/6 |
 | Sync (§9.2-9.3) | 11/11 |
-| Editor | 12/12 |
+| Editor and Screen 1 | 21/21 |
 | Supabase (§9.4) | not run — no project |
 
 Every Layer 2 source and test that existed before Layer 1b is byte-identical
@@ -126,3 +130,11 @@ Supabase provisioning, then the remaining §9.4 tests.
 8. **CalendarScreen called `db.deleteEntry` directly**, bypassing Layer 2
    — a boundary violation from the Screen 3 work. It now goes through
    Layer 2's `deleteEntry`.
+9. **A scheduled day with nothing logged shows a faint dot.** Loop leaves
+   it entirely blank, which makes it indistinguishable from a day the
+   habit was never due and gives no hint that the cell is tappable. The
+   dot is far dimmer than today's gold ring, so the invitation to log
+   today still reads first.
+10. **The filter and overflow buttons do something.** The spec draws both
+    and defines neither. Rendering a control that does nothing is worse
+    than not drawing it, and they were reported as broken.

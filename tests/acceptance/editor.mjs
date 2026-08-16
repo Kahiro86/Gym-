@@ -285,6 +285,213 @@ async function main() {
     return "back to an empty list, nothing written";
   });
 
+  // ── Screen 1's top bar and grid ───────────────────────────────────
+
+  await t("habit rows line up with their day-column headers", async () => {
+    // The regression this guards: HabitEditor.css defined `.row`, which
+    // ListScreen.css already used for a habit row. The editor's
+    // `display: flex` won on source order, so the grid collapsed — the
+    // name squashed to one letter and the cells bunched at the left,
+    // nowhere near the columns they belonged to.
+    const r = await withApp(async (page) => {
+      await createByHand(page, { name: "Alignment check" });
+      return page.evaluate(() => {
+        const centre = (el) => { const b = el.getBoundingClientRect(); return b.left + b.width / 2; };
+        return {
+          headers: [...document.querySelectorAll(".colheader__day")].map(centre),
+          cells: [...document.querySelectorAll(".grid.row .cell")].map(centre),
+          nameWidth: document.querySelector(".row__name").getBoundingClientRect().width,
+          label: document.querySelector(".row__label").innerText,
+        };
+      });
+    });
+    assert(r.cells.length === r.headers.length,
+      `${r.cells.length} cells against ${r.headers.length} columns`);
+    for (let i = 0; i < r.cells.length; i++) {
+      assert(Math.abs(r.cells[i] - r.headers[i]) < 1.5,
+        `cell ${i} sits at ${r.cells[i].toFixed(1)}px, its column header at ${r.headers[i].toFixed(1)}px`);
+    }
+    // The name column must be wide enough to be a name, not an initial.
+    assert(r.nameWidth > 90, `the name column collapsed to ${r.nameWidth.toFixed(0)}px`);
+    assert(r.label === "Alignment check", `the name rendered as "${r.label}"`);
+    return `${r.cells.length} cells centred on their headers; name column ${r.nameWidth.toFixed(0)}px`;
+  });
+
+  await t("a scheduled day with nothing logged is visibly tappable", async () => {
+    const r = await withApp(async (page) => {
+      await createByHand(page, { name: "Daily" });
+      return page.evaluate(() => ({
+        // Today gets the gold ring; the four past days are scheduled but
+        // unlogged, and must not be indistinguishable from a day off.
+        rings: document.querySelectorAll(".cell__ring").length,
+        todo: document.querySelectorAll(".cell__todo").length,
+      }));
+    });
+    assert(r.rings === 1, `expected one ring on today, found ${r.rings}`);
+    assert(r.todo === 4, `expected four tappable past days marked, found ${r.todo}`);
+    return "today ringed, the other four scheduled days marked";
+  });
+
+  await t("a day the habit is not due carries no mark at all", async () => {
+    const r = await withApp(async (page) => {
+      await page.getByLabel("Add a habit").click();
+      await page.getByText("Yes or no", { exact: true }).click();
+      await page.getByLabel("Name").fill("Weekdays only");
+      await page.getByLabel("How often").selectOption("specific_days");
+      // Monday only, so at most one of the five columns is scheduled.
+      for (const d of ["Tuesday", "Wednesday", "Thursday", "Friday"]) {
+        await page.getByLabel(d, { exact: true }).click();
+      }
+      await page.getByLabel("Save habit").click();
+      await page.waitForSelector(".row__name", { timeout: 15000 });
+      return page.evaluate(() => ({
+        off: document.querySelectorAll(".cell--off").length,
+        offWithMark: [...document.querySelectorAll(".cell--off")]
+          .filter((c) => c.querySelector(".cell__todo, .cell__ring")).length,
+      }));
+    });
+    assert(r.off >= 4, `expected at least four days off, found ${r.off}`);
+    assert(r.offWithMark === 0, `${r.offWithMark} days off were marked as if they were tappable`);
+    return `${r.off} days off, none of them marked`;
+  });
+
+  await t("the filter hides habits done today, and says the list is filtered", async () => {
+    const r = await withApp(async (page) => {
+      await createByHand(page, { name: "Done" });
+      await createByHand(page, { name: "Not done" });
+      // Tick today on the first habit only.
+      await page.locator(".grid.row").first().locator(".cell").first().click();
+      await page.waitForTimeout(400);
+
+      await page.getByLabel("Filter").click();
+      await page.getByText("Hide done today").click();
+      await page.waitForTimeout(500);
+      const filtered = await page.locator(".row__label").allInnerTexts();
+      const marked = await page.locator(".topbar__action--on").count();
+
+      await page.getByText("Hide done today").click();
+      await page.waitForTimeout(500);
+      return { filtered, marked, restored: await page.locator(".row__label").allInnerTexts() };
+    });
+    assert(!r.filtered.includes("Done"), `the completed habit is still listed: ${JSON.stringify(r.filtered)}`);
+    assert(r.filtered.includes("Not done"), `the outstanding habit vanished: ${JSON.stringify(r.filtered)}`);
+    // Without this, an empty list looks like data loss.
+    assert(r.marked === 1, "nothing indicated that a filter was hiding habits");
+    assert(r.restored.length === 2, `turning the filter off did not restore both: ${JSON.stringify(r.restored)}`);
+    return `filtered to ${JSON.stringify(r.filtered)}, filter icon marked, restored on toggle off`;
+  });
+
+  await t("the filter can show archived habits, labelled as archived", async () => {
+    const r = await withApp(async (page) => {
+      await createByHand(page, { name: "Retired" });
+      await page.locator(".row__name").first().click();
+      await page.getByLabel("Edit this habit").click();
+      await page.getByText(/^Archive/).click();
+      await page.waitForSelector(".notice__title", { timeout: 15000 });
+
+      const hidden = await page.locator(".row__label").count();
+      await page.getByLabel("Filter").click();
+      await page.getByText("Show archived").click();
+      await page.waitForSelector(".row__label", { timeout: 15000 });
+      return {
+        hidden,
+        shown: await page.locator(".row__label").allInnerTexts(),
+        labelled: await page.locator(".row__archived").count(),
+      };
+    });
+    assert(r.hidden === 0, "the archived habit was listed without asking");
+    assert(r.shown.includes("Retired"), `the filter did not reveal it: ${JSON.stringify(r.shown)}`);
+    assert(r.labelled === 1, "it was shown without being marked as archived");
+    return "hidden by default, shown and labelled when asked for";
+  });
+
+  await t("an empty list caused by a filter does not claim you have no habits", async () => {
+    const r = await withApp(async (page) => {
+      await createByHand(page, { name: "Only one" });
+      await page.locator(".grid.row").first().locator(".cell").first().click();
+      await page.waitForTimeout(400);
+      await page.getByLabel("Filter").click();
+      await page.getByText("Hide done today").click();
+      // Dismiss the sheet the way a person would before reading the list
+      // underneath it — its backdrop is the tap-to-close target.
+      await page.keyboard.press("Escape");
+      await page.waitForSelector(".notice__title", { timeout: 10000 });
+      const title = await page.locator(".notice__title").innerText();
+      await page.getByText("Clear the filter").click();
+      await page.waitForSelector(".row__label", { timeout: 10000 });
+      return { title, restored: await page.locator(".row__label").allInnerTexts() };
+    });
+    assert(/nothing matches/i.test(r.title),
+      `an empty filtered list said "${r.title}", which reads as data loss`);
+    assert(r.restored.includes("Only one"), "clearing the filter did not bring the habit back");
+    return `"${r.title}", and clearing it restores the list`;
+  });
+
+  await t("the overflow menu creates a group, which the editor can then use", async () => {
+    const r = await withApp(async (page) => {
+      await page.getByLabel("More").click();
+      await page.getByLabel("New group").fill("Morning");
+      await page.getByText("Add", { exact: true }).click();
+      await page.waitForTimeout(600);
+
+      // The new group has to be selectable when making a habit.
+      await page.getByLabel("Add a habit").click();
+      await page.getByText("Yes or no", { exact: true }).click();
+      await page.getByLabel("Name").fill("Meditate");
+      await page.getByLabel("Group").selectOption({ label: "Morning" });
+      await page.getByLabel("Save habit").click();
+      await page.waitForSelector(".row__name", { timeout: 15000 });
+      return {
+        groups: await page.locator(".group").allInnerTexts(),
+        stored: await page.evaluate(() => window.__db.listRoutines().then((rs) => rs.map((x) => x.name))),
+      };
+    });
+    assert(r.stored.includes("Morning"), `the group was not saved: ${JSON.stringify(r.stored)}`);
+    assert(r.groups.some((g) => /morning/i.test(g)),
+      `the habit did not appear under its group: ${JSON.stringify(r.groups)}`);
+    return "group created from the menu, then used as a habit's group";
+  });
+
+  await t("the overflow menu changes the day-start hour and reports storage", async () => {
+    const r = await withApp(async (page) => {
+      await page.getByLabel("More").click();
+      await page.getByLabel("The day starts at").selectOption("6");
+      await page.waitForTimeout(500);
+      const storage = await page.locator(".sheet__section").last().innerText();
+      // Reopen to confirm it was persisted, not just held in the form.
+      await page.keyboard.press("Escape");
+      await page.getByLabel("More").click();
+      return {
+        stored: await page.evaluate(() => window.__db.getDayStartHour()),
+        shown: await page.getByLabel("The day starts at").inputValue(),
+        storage,
+      };
+    });
+    assert(r.stored === 6, `day_start_hour is ${r.stored}`);
+    assert(r.shown === "6", `the menu reopened showing ${r.shown}`);
+    assert(/opfs-sahpool/.test(r.storage), `storage was not reported: ${r.storage}`);
+    return `day starts at 06:00; storage line reads back the live VFS`;
+  });
+
+  await t("a menu closes on Escape and on a tap outside it", async () => {
+    const r = await withApp(async (page) => {
+      await page.getByLabel("Filter").click();
+      const opened = await page.locator(".sheet").count();
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(200);
+      const afterEscape = await page.locator(".sheet").count();
+
+      await page.getByLabel("More").click();
+      await page.locator(".sheet__backdrop").click({ position: { x: 5, y: 700 } });
+      await page.waitForTimeout(200);
+      return { opened, afterEscape, afterBackdrop: await page.locator(".sheet").count() };
+    });
+    assert(r.opened === 1, "the filter menu did not open");
+    assert(r.afterEscape === 0, "Escape left the menu open");
+    assert(r.afterBackdrop === 0, "tapping outside left the menu open");
+    return "opens, then closes on Escape and on an outside tap";
+  });
+
   const failed = results.filter((r) => !r.pass);
   console.log(`\n${results.length - failed.length}/${results.length} passed.`);
   if (failed.length) {

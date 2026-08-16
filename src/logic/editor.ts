@@ -12,6 +12,7 @@
 // is attempted, rather than surfacing a thrown error after the fact.
 import type {
   CreateHabitInput, Db, FrequencyType, Habit, HabitType, Routine, TargetDirection,
+  SyncState,
 } from "../db/types.js";
 
 /**
@@ -192,4 +193,33 @@ export function createRoutine(db: Db, name: string): Promise<Routine> {
 /** Whether a habit's type can still be changed — Layer 1 §6.3. */
 export async function canChangeType(db: Db, habitId: string): Promise<boolean> {
   return (await db.getEntryCount(habitId)) === 0;
+}
+
+// ── Settings, for the list screen's overflow menu ─────────────────────
+
+export function getDayStartHour(db: Db): Promise<number> {
+  return db.getDayStartHour();
+}
+
+/** Layer 1 validates the range and refuses to re-date existing entries. */
+export function setDayStartHour(db: Db, hour: number): Promise<void> {
+  return db.setDayStartHour(hour);
+}
+
+export interface StorageSummary {
+  vfsName: string;
+  persisted: boolean;
+  syncState: SyncState;
+  pending: number;
+}
+
+/**
+ * The two sync facts §8 permits, alongside where the data physically
+ * lives. Assembled here so the screen makes one call rather than three.
+ */
+export async function getStorageSummary(db: Db): Promise<StorageSummary> {
+  const [info, syncState, pending] = await Promise.all([
+    db.getStorageInfo(), db.getSyncState(), db.getPendingCount(),
+  ]);
+  return { vfsName: info.vfsName, persisted: info.persisted, syncState, pending };
 }

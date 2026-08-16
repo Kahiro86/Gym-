@@ -19,7 +19,7 @@ export type {
 export type { Period } from "./period.js";
 export { effectiveStart, habitCreatedDate } from "./period.js";
 export { getListView, listDays, buildListView, DEFAULT_LIST_DAYS } from "./listView.js";
-export type { ListView, ListGroup, ListRow, ListCell, CellState } from "./listView.js";
+export type { ListView, ListGroup, ListRow, ListCell, CellState, ListOptions } from "./listView.js";
 export { getDetailHeader, getOverview, describeFrequency, computeOverview, spanForDetail } from "./detail.js";
 export {
   getCalendarMonth, getStreaksView, buildCalendarMonth, frequencyDots,
@@ -31,8 +31,9 @@ export {
   emptyDraft, draftFromHabit, validateDraft, toCreateInput,
   createHabit, updateHabit, archiveHabit, unarchiveHabit, deleteHabit, deleteEntry,
   listRoutines, createRoutine, canChangeType,
+  getDayStartHour, setDayStartHour, getStorageSummary,
 } from "./editor.js";
-export type { HabitDraft, DraftProblem } from "./editor.js";
+export type { HabitDraft, DraftProblem, StorageSummary } from "./editor.js";
 
 interface Loaded {
   habit: Habit;

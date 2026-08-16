@@ -108,7 +108,7 @@
 
 .input--short { width: auto; flex: 1; min-width: 0; }
 
-.row { display: flex; gap: 8px; align-items: center; }
+.editor__row { display: flex; gap: 8px; align-items: center; }
 
 /* ── Segmented control ───────────────────────────────────────────── */
 .segmented {

@@ -213,7 +213,7 @@ export function HabitEditor({ habit, onDone, onCancel }: {
         {numeric && (
           <>
             <Field label="Target" error={problemFor("target")}>
-              <div className="row">
+              <div className="editor__row">
                 <input
                   className="input input--short"
                   inputMode="decimal"
@@ -345,7 +345,7 @@ export function HabitEditor({ habit, onDone, onCancel }: {
                   Delete {draft.name || "this habit"} and every day logged against it?
                   This cannot be undone.
                 </div>
-                <div className="row">
+                <div className="editor__row">
                   <button type="button" className="editor__secondary" onClick={() => setConfirmingDelete(false)}>
                     Keep it
                   </button>
