@@ -16,7 +16,7 @@ bugs were found and fixed getting there; see below.
 ## Layer 2 — logic — DONE
 Scores, streaks, trends, history, heatmap, and the three screens' view
 models. Pure core plus a thin async facade, so the arithmetic is testable
-without a browser. Layer 1 and Layer 2 together have 238 unit tests; Layer 2
+without a browser. Layer 1 and Layer 2 together have 245 unit tests; Layer 2
 has 17 integration tests.
 
 ## Layer 3 — UI
