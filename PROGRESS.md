@@ -10,13 +10,14 @@ the 4am day-start, the tri-state entry model, `UNIQUE(habit_id, date)`.
 
 The revised data spec added tests 32-60 — concurrency, volume and query
 plans, hostile input, calendar edge cases, migration robustness,
-durability. 32/32 in `tests/acceptance/layer1-extended.mjs`. Seven real
+durability. 32/32 in `tests/acceptance/layer1-extended.mjs`. Eight real
 bugs were found and fixed getting there; see below.
 
 ## Layer 2 — logic — DONE
 Scores, streaks, trends, history, heatmap, and the three screens' view
 models. Pure core plus a thin async facade, so the arithmetic is testable
-without a browser. 198 unit tests, 17 integration tests.
+without a browser. Layer 1 and Layer 2 together have 238 unit tests; Layer 2
+has 17 integration tests.
 
 ## Layer 3 — UI
 - Screen 1 (list) — DONE
