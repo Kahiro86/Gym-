@@ -41,6 +41,36 @@ export class IllegalStateChangeError extends Error {
 }
 
 /**
+ * Spec §9.12 test 58. Browser storage is finite, and a write that fails
+ * on quota is not a bug in the data — it is a condition the UI has to be
+ * able to act on. Distinct from ConstraintError so "your storage is
+ * full" can be said in those words.
+ */
+export class QuotaExceededError extends Error {
+  constructor(detail: string) {
+    super(`QuotaExceededError: the browser refused the write — storage is full (${detail})`);
+    this.name = "QuotaExceededError";
+  }
+}
+
+/**
+ * Spec §9.12 test 59. A browser may evict an origin's storage under
+ * pressure. The database then opens perfectly — and empty. Presenting
+ * that as "you have never logged anything" would be a lie the user
+ * cannot detect, so a prior-use marker outside the database lets the app
+ * tell the difference between new and erased.
+ */
+export class StorageEvictedError extends Error {
+  constructor(readonly lastKnownHabits: number, readonly lastSeenAt: string) {
+    super(
+      `StorageEvictedError: this browser previously held ${lastKnownHabits} habit(s), last seen ` +
+      `${lastSeenAt}, but the database is now empty. The browser appears to have evicted it.`,
+    );
+    this.name = "StorageEvictedError";
+  }
+}
+
+/**
  * Layer 1b §7.5. Names both sides of the collision and which one won, so
  * a lost edit is explainable rather than merely gone.
  */
@@ -72,6 +102,14 @@ export function serializeError(err: unknown): SerializedError {
   if (err instanceof ConstraintError) return { name: err.name, message: err.message, extra: { constraint: err.constraint } };
   if (err instanceof ConfirmationRequiredError) return { name: err.name, message: err.message, extra: { action: err.action } };
   if (err instanceof IllegalStateChangeError) return { name: err.name, message: err.message, extra: { field: err.field } };
+  if (err instanceof QuotaExceededError) return { name: err.name, message: err.message, extra: {} };
+  if (err instanceof StorageEvictedError) {
+    return {
+      name: err.name,
+      message: err.message,
+      extra: { lastKnownHabits: err.lastKnownHabits, lastSeenAt: err.lastSeenAt },
+    };
+  }
   if (err instanceof SyncConflictError) {
     return {
       name: err.name,
@@ -93,6 +131,8 @@ const PROTOTYPES: Record<string, object> = {
   ConfirmationRequiredError: ConfirmationRequiredError.prototype,
   IllegalStateChangeError: IllegalStateChangeError.prototype,
   SyncConflictError: SyncConflictError.prototype,
+  QuotaExceededError: QuotaExceededError.prototype,
+  StorageEvictedError: StorageEvictedError.prototype,
 };
 
 export function reviveError(s: SerializedError): Error {

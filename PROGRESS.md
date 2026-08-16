@@ -6,7 +6,12 @@ has been reported and cleared.
 ## Layer 1 — data — DONE
 SQLite/WASM in a Web Worker. Schema, migrations, validation, typed errors,
 the 4am day-start, the tri-state entry model, `UNIQUE(habit_id, date)`.
-32/32 acceptance tests.
+32/32 acceptance tests (spec tests 1-31).
+
+The revised data spec added tests 32-60 — concurrency, volume and query
+plans, hostile input, calendar edge cases, migration robustness,
+durability. 32/32 in `tests/acceptance/layer1-extended.mjs`. Seven real
+bugs were found and fixed getting there; see below.
 
 ## Layer 2 — logic — DONE
 Scores, streaks, trends, history, heatmap, and the three screens' view
@@ -73,9 +78,10 @@ without a browser. 198 unit tests, 17 integration tests.
 
 | Suite | Result |
 |---|---|
-| Layer 1 acceptance | 32/32 |
+| Layer 1 acceptance (1-31) | 32/32 |
+| Layer 1 extended (32-60) | 32/32 |
 | Layer 2 integration | 17/17 |
-| Layer 2 unit | 198/198 |
+| Layer 2 and Layer 1 unit | 238/238 |
 | Storage (§9.2) | 6/6 |
 | Sync (§9.2-9.3) | 11/11 |
 | Editor and Screen 1 | 21/21 |
@@ -85,6 +91,34 @@ Every Layer 2 source and test that existed before Layer 1b is byte-identical
 to what it was then — that is §9.1's requirement, and it holds. Layer 2 has
 since *gained* `editor.ts` and 38 unit tests, which is an addition for
 the habit editor, not a change to anything Layer 1b touched.
+
+## Bugs the revised Layer 1 spec found
+
+Each of these was live, and none was caught by the previous 31 tests.
+
+1. **Dates were validated by regex only.** `2026-02-30`, `2026-13-01`,
+   `2027-02-29` and `2026-04-31` all matched `^\d{4}-\d{2}-\d{2}$` and
+   were stored. Once written, no later check could say what the user
+   meant. `src/db/dates.ts` now checks the real calendar, including the
+   century rule — `2100-02-29` is rejected, `2000-02-29` is not.
+2. **`Infinity` was storable as an entry value.** Only `NaN` was checked.
+   One stored infinity poisons every sum computed from it.
+3. **Negative values were storable.** They have no meaning in this model:
+   a day not done is `0`, an unlogged day has no row.
+4. **`transaction(fn)` was missing entirely**, though spec §5 requires
+   it. Multi-write operations had no way to be atomic.
+5. **Transactions could not nest.** Adding `runTransaction` exposed it
+   immediately: every mutation already opens its own transaction for the
+   sync queue, and SQLite refuses a nested `BEGIN`. Inner writes now join
+   the outer transaction, which is also the correct semantics.
+6. **A newer database would be opened and written by older code.** Now
+   refused, with both version numbers in the message.
+7. **Quota failures surfaced untyped**, so the UI could not tell "storage
+   is full" from a constraint violation. Now `QuotaExceededError`.
+8. **An evicted database was indistinguishable from a new one.** Someone
+   whose browser cleared their history would have been shown "No habits
+   yet". A marker outside the database now makes the two distinguishable,
+   and the list says so plainly.
 
 ## Next
 Supabase provisioning, then the remaining §9.4 tests.
@@ -139,3 +173,12 @@ Supabase provisioning, then the remaining §9.4 tests.
 10. **The filter and overflow buttons do something.** The spec draws both
     and defines neither. Rendering a control that does nothing is worse
     than not drawing it, and they were reported as broken.
+11. **`transaction(fn)` is `runTransaction(ops)`** (§5). A callback
+    cannot cross the Worker boundary, and passing a live transaction
+    handle to the main thread would hold it open across a postMessage
+    round trip — long enough to block another tab. Operations are named
+    instead, and only repository writes are transactable.
+12. **Date bounds are deliberately unbounded** (§9.10 test 52). 1970 and
+    2099 both store; lexicographic order stays chronological for any
+    four-digit year, so no limit is needed and any chosen one would be
+    arbitrary.

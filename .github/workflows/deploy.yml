@@ -52,6 +52,7 @@ jobs:
             sleep 1
           done
           BASE_URL=http://localhost:5199/Gym-/ node tests/acceptance/layer1.mjs
+          BASE_URL=http://localhost:5199/Gym-/ node tests/acceptance/layer1-extended.mjs
           BASE_URL=http://localhost:5199/Gym-/ node tests/acceptance/layer2.mjs
           BASE_URL=http://localhost:5199/Gym-/ node tests/acceptance/storage.mjs
           BASE_URL=http://localhost:5199/Gym-/ node tests/acceptance/sync.mjs

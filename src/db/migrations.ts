@@ -164,11 +164,28 @@ export function getSchemaVersion(db: MigratableDb): number {
  * run (spec §4.6). Idempotent: re-running against an up-to-date database
  * does nothing.
  */
+/** The newest migration this build knows how to apply. */
+export const LATEST_VERSION = MIGRATIONS.reduce((n, m) => Math.max(n, m.version), 0);
+
 export function runMigrations(db: MigratableDb): void {
   // SQLite does not enforce foreign keys unless asked, on every
   // connection (spec §6.6). Forgetting this is a silent correctness bug.
   db.exec("PRAGMA foreign_keys = ON;");
   const current = getSchemaVersion(db);
+
+  // Spec §9.11 test 56. A database written by a newer build may contain
+  // columns and tables this one does not know about. Opening it anyway
+  // means writing rows that the newer build will read as corrupt, or
+  // dropping data on a later migration. Refusing costs the user one
+  // session; proceeding can cost them their history.
+  if (current > LATEST_VERSION) {
+    throw new Error(
+      `This copy of the app is older than your data. The database is at schema version ` +
+      `${current} and this build only understands ${LATEST_VERSION}. Refusing to open it, ` +
+      `because writing to it could corrupt entries a newer version created. Update the app, ` +
+      `or reopen it in the version you last used.`,
+    );
+  }
   for (const m of MIGRATIONS.filter((x) => x.version > current).sort((a, b) => a.version - b.version)) {
     db.transaction((tx) => {
       tx.exec(m.up);

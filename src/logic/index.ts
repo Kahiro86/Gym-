@@ -31,7 +31,7 @@ export {
   emptyDraft, draftFromHabit, validateDraft, toCreateInput,
   createHabit, updateHabit, archiveHabit, unarchiveHabit, deleteHabit, deleteEntry,
   listRoutines, createRoutine, canChangeType,
-  getDayStartHour, setDayStartHour, getStorageSummary,
+  getDayStartHour, setDayStartHour, getStorageSummary, checkEviction,
 } from "./editor.js";
 export type { HabitDraft, DraftProblem, StorageSummary } from "./editor.js";
 

@@ -12,7 +12,7 @@
 // is attempted, rather than surfacing a thrown error after the fact.
 import type {
   CreateHabitInput, Db, FrequencyType, Habit, HabitType, Routine, TargetDirection,
-  SyncState,
+  SyncState, EvictionReport,
 } from "../db/types.js";
 
 /**
@@ -204,6 +204,14 @@ export function getDayStartHour(db: Db): Promise<number> {
 /** Layer 1 validates the range and refuses to re-date existing entries. */
 export function setDayStartHour(db: Db, hour: number): Promise<void> {
   return db.setDayStartHour(hour);
+}
+
+/**
+ * Non-null when this browser is known to have held data and the database
+ * is now empty (spec §9.12 test 59).
+ */
+export async function checkEviction(db: Db): Promise<EvictionReport | null> {
+  return (await db.getStorageInfo()).evicted;
 }
 
 export interface StorageSummary {

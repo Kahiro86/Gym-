@@ -63,11 +63,31 @@ export interface VfsInfo {
   files: string[];
 }
 
+export interface RowCounts {
+  habits: number;
+  routines: number;
+  entries: number;
+}
+
+/** What this browser last held, when the database now holds nothing. */
+export interface EvictionReport {
+  lastKnownHabits: number;
+  lastKnownEntries: number;
+  lastSeenAt: string;
+}
+
 export interface StorageInfo extends VfsInfo {
   /** Whether the browser has granted eviction-resistant storage. */
   persisted: boolean;
   /** False when persistence was already granted and nothing was asked. */
   persistRequested: boolean;
+  /** Rows actually present, so an empty database is a fact, not a guess. */
+  counts: RowCounts;
+  /**
+   * Non-null when the database is empty but this browser is known to
+   * have held data. Never presented as "no habits yet".
+   */
+  evicted: EvictionReport | null;
 }
 
 /**
@@ -155,8 +175,19 @@ export interface Db {
   /** Statements executed through the repository since the last reset. */
   __getStatementCount(): Promise<number>;
   __resetStatementCount(): Promise<void>;
+  /**
+   * Runs several writes atomically (spec §5). Operations are named rather
+   * than passed as a callback, because a callback cannot cross the Worker
+   * boundary and a live transaction must not be held open across one.
+   */
+  runTransaction(ops: Array<{ method: string; args: unknown[] }>): Promise<unknown[]>;
+
   /** Full entries table, for before/after comparisons. */
   __dumpEntries(): Promise<Entry[]>;
+  /** Row counts, used to tell an empty database from an evicted one. */
+  __rowCounts(): Promise<RowCounts>;
+  /** EXPLAIN QUERY PLAN output, to prove a query uses its index. */
+  __explain(sql: string, bind?: unknown[]): Promise<string[]>;
   /**
    * Plain INSERT with no ON CONFLICT clause — the only way to genuinely
    * attempt a duplicate (habit_id, date) row and observe the schema-level

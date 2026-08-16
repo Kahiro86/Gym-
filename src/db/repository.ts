@@ -6,8 +6,9 @@ import { runMigrations } from "./migrations.js";
 import { now } from "./clock.js";
 import {
   ValidationError, NotFoundError, ConstraintError,
-  ConfirmationRequiredError, IllegalStateChangeError,
+  ConfirmationRequiredError, IllegalStateChangeError, QuotaExceededError,
 } from "./errors.js";
+import { assertDateString } from "./dates.js";
 import type {
   Routine, Habit, Entry, CreateRoutineInput, UpdateRoutinePatch,
   CreateHabitInput, UpdateHabitPatch, FrequencyType,
@@ -60,7 +61,39 @@ const pad2 = (n: number): string => String(n).padStart(2, "0");
 const localDateStr = (d: Date): string =>
   `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * Spec §9.9 tests 44 and 45. A stored NaN poisons every average computed
+ * from it, forever, with no way to tell afterwards which day was wrong;
+ * Infinity does the same to every sum. Negative amounts have no meaning
+ * in this model — a day not done is `0`, an unlogged day is no row —
+ * so a negative is a mistake, not a value.
+ */
+function assertEntryValue(value: unknown): number {
+  if (typeof value !== "number") {
+    throw new ValidationError("value", value, "must be a number");
+  }
+  if (Number.isNaN(value)) {
+    throw new ValidationError("value", value, "must be a number, and NaN is not one");
+  }
+  if (!Number.isFinite(value)) {
+    throw new ValidationError("value", value, "must be finite — Infinity cannot be summed or averaged");
+  }
+  if (value < 0) {
+    throw new ValidationError(
+      "value", value,
+      "must not be negative — a day not done is 0, and an unlogged day has no row at all",
+    );
+  }
+  return value;
+}
+
+/** Spec §9.9 test 41. Rejects both "" and whitespace-only. */
+function assertName(field: string, value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new ValidationError(field, value, "is required and cannot be blank");
+  }
+  return value;
+}
 
 // ── Sync bookkeeping (Layer 1b §4) ────────────────────────────────────
 export type SyncTable = "habits" | "routines" | "entries";
@@ -214,6 +247,30 @@ export class Repository {
     runMigrations(db as unknown as Parameters<typeof runMigrations>[0]);
   }
 
+  /**
+   * How many transactions deep this call is.
+   *
+   * Every mutation wraps itself in a transaction so it is atomic with its
+   * sync-queue row. `runTransaction` then wraps several of those, and
+   * SQLite has no nested BEGIN — it fails outright with "cannot start a
+   * transaction within a transaction". Joining the outer transaction
+   * instead is not a workaround but the correct semantics: the caller
+   * asked for all-or-nothing across the whole batch, so an inner commit
+   * would be exactly wrong.
+   */
+  private txDepth = 0;
+
+  /** Runs `cb` inside a transaction, or inside the current one if any. */
+  private inTransaction<T>(cb: () => T): T {
+    if (this.txDepth > 0) return cb();
+    this.txDepth++;
+    try {
+      return this.db.transaction(() => cb());
+    } finally {
+      this.txDepth--;
+    }
+  }
+
   // ── Sync bookkeeping ────────────────────────────────────────────────
   /**
    * Runs a mutation and records it for the sync engine in ONE transaction.
@@ -228,7 +285,7 @@ export class Repository {
    * existing `this.h` helpers are already inside the transaction.
    */
   private write<T>(cb: (enqueue: (table: SyncTable, recordId: string, op: SyncOperation) => void) => T): T {
-    return this.db.transaction(() => cb((table, recordId, op) => this.enqueue(table, recordId, op)));
+    return this.inTransaction(() => cb((table, recordId, op) => this.enqueue(table, recordId, op)));
   }
 
   private enqueue(table: SyncTable, recordId: string, operation: SyncOperation): void {
@@ -245,7 +302,7 @@ export class Repository {
 
   // ── Routines ────────────────────────────────────────────────────────
   createRoutine(data: CreateRoutineInput): Routine {
-    if (!data?.name?.trim()) throw new ValidationError("name", data?.name, "routine name is required");
+    assertName("name", data?.name);
     const id = uuid();
     const ts = stamp();
     this.write((enqueue) => {
@@ -274,9 +331,7 @@ export class Repository {
 
   updateRoutine(id: string, patch: UpdateRoutinePatch): Routine {
     const cur = this.getRoutine(id);
-    if (patch.name !== undefined && !patch.name.trim()) {
-      throw new ValidationError("name", patch.name, "routine name is required");
-    }
+    if (patch.name !== undefined) assertName("name", patch.name);
     const next = { ...cur, ...patch };
     this.write((enqueue) => {
       this.h.run(
@@ -358,7 +413,7 @@ export class Repository {
 
   // ── Habits ──────────────────────────────────────────────────────────
   createHabit(data: CreateHabitInput): Habit {
-    if (!data?.name?.trim()) throw new ValidationError("name", data?.name, "habit name is required");
+    assertName("name", data?.name);
     const targetDirection = data.targetDirection ?? "at_least";
     validateHabitShape({
       type: data.type,
@@ -421,9 +476,7 @@ export class Repository {
         "cannot change a habit's type while entries exist — archive it and create a new habit instead",
       );
     }
-    if (patch.name !== undefined && !patch.name.trim()) {
-      throw new ValidationError("name", patch.name, "habit name is required");
-    }
+    if (patch.name !== undefined) assertName("name", patch.name);
     if (patch.routineId) this.getRoutine(patch.routineId);
 
     const pick = <K extends keyof UpdateHabitPatch, F>(key: K, fallback: F) =>
@@ -545,6 +598,8 @@ export class Repository {
   }
 
   getEntriesForHabit(habitId: string, startDate: string, endDate: string): Entry[] {
+    assertDateString("startDate", startDate);
+    assertDateString("endDate", endDate);
     return this.h.rows(
       `SELECT * FROM entries WHERE habit_id=? AND date>=? AND date<=? AND deleted_at IS NULL
        ORDER BY date`,
@@ -553,6 +608,7 @@ export class Repository {
   }
 
   getEntriesForDate(date: string): Entry[] {
+    assertDateString("date", date);
     return this.h.rows(
       `SELECT * FROM entries WHERE date=? AND deleted_at IS NULL ORDER BY habit_id`, [date],
     ).map(toEntry);
@@ -560,6 +616,8 @@ export class Repository {
 
   /** One statement regardless of habit count — the list view depends on this. */
   getEntriesForHabits(habitIds: string[], startDate: string, endDate: string): Entry[] {
+    assertDateString("startDate", startDate);
+    assertDateString("endDate", endDate);
     if (!habitIds.length) return [];
     const placeholders = habitIds.map(() => "?").join(",");
     return this.h.rows(
@@ -578,8 +636,8 @@ export class Repository {
    */
   setEntry(habitId: string, date: string, value: number, note: string | null = null): Entry {
     this.getHabit(habitId);
-    if (!DATE_RE.test(date)) throw new ValidationError("date", date, "must be a YYYY-MM-DD local calendar date");
-    if (typeof value !== "number" || Number.isNaN(value)) throw new ValidationError("value", value, "must be a number");
+    assertDateString("date", date);
+    assertEntryValue(value);
     const ts = stamp();
     const entry = this.write((enqueue) => {
       this.h.run(
@@ -608,6 +666,7 @@ export class Repository {
    * the tri-state model Layer 1 §4.4 defines is unchanged from above.
    */
   deleteEntry(habitId: string, date: string): void {
+    assertDateString("date", date);
     const rows = this.h.rows(
       `SELECT id FROM entries WHERE habit_id=? AND date=? AND deleted_at IS NULL`, [habitId, date],
     );
@@ -684,6 +743,43 @@ export class Repository {
     return localDateStr(effective);
   }
 
+  /**
+   * Spec §5 and §9.7 test 33. Runs several writes as one unit: if the
+   * callback throws, nothing it did survives.
+   *
+   * The callback names the operations rather than receiving a handle,
+   * because a handle would have to cross the Worker boundary and would
+   * let the caller hold a live transaction open across a postMessage
+   * round trip — long enough for another tab to block on it.
+   */
+  runTransaction(ops: Array<{ method: string; args: unknown[] }>): unknown[] {
+    const results: unknown[] = [];
+    this.inTransaction(() => {
+      for (const op of ops) {
+        const fn = (this as unknown as Record<string, ((...a: unknown[]) => unknown) | undefined>)[op.method];
+        if (typeof fn !== "function" || op.method.startsWith("__") || op.method === "runTransaction") {
+          throw new ValidationError("method", op.method, "is not a transactable repository method");
+        }
+        results.push(fn.apply(this, op.args));
+      }
+    });
+    return results;
+  }
+
+  /** Spec §9.8 test 38. Returns the query plan for a statement. */
+  __explain(sql: string, bind: unknown[] = []): string[] {
+    return this.h.rows(`EXPLAIN QUERY PLAN ${sql}`, bind).map((r) => String(r.detail ?? JSON.stringify(r)));
+  }
+
+  /** Total rows, used to tell an empty database from an evicted one. */
+  __rowCounts(): { habits: number; routines: number; entries: number } {
+    return {
+      habits: Number(this.h.one(`SELECT COUNT(*) FROM habits`)),
+      routines: Number(this.h.one(`SELECT COUNT(*) FROM routines`)),
+      entries: Number(this.h.one(`SELECT COUNT(*) FROM entries`)),
+    };
+  }
+
   // ── Sync queue (Layer 1b §4.2, §8) ──────────────────────────────────
   /** Rows waiting to reach the server. The UI may see this count (§8). */
   getPendingCount(): number {
@@ -735,7 +831,7 @@ export class Repository {
 
   /** A queue item that reached the server: drop it, mark the row synced. */
   resolveSyncItem(queueId: number, table: SyncTable, recordId: string): void {
-    this.db.transaction(() => {
+    this.inTransaction(() => {
       this.h.run(`DELETE FROM sync_queue WHERE id=?`, [queueId]);
       // Only if nothing newer is still queued for the same row — otherwise
       // "synced" would be a lie about the version now on disk.
@@ -754,7 +850,7 @@ export class Repository {
    * surfaced rather than dropped (§7.1, non-negotiable #6).
    */
   failSyncItem(queueId: number, message: string, kind: "retry" | "conflict"): void {
-    this.db.transaction(() => {
+    this.inTransaction(() => {
       this.h.run(
         `UPDATE sync_queue SET attempts=attempts+1, last_error=? WHERE id=?`, [message, queueId],
       );
@@ -784,7 +880,7 @@ export class Repository {
    */
   purgeTombstones(olderThan: string): number {
     let removed = 0;
-    this.db.transaction(() => {
+    this.inTransaction(() => {
       for (const table of ["entries", "habits", "routines"] as SyncTable[]) {
         const ids = this.h.rows(
           `SELECT id FROM ${table}
@@ -826,6 +922,8 @@ export class Repository {
 }
 
 const SQLITE_CONSTRAINT = 19;
+const SQLITE_FULL = 13;
+const SQLITE_IOERR = 10;
 
 /**
  * Converts a raw sqlite3 failure into a typed error. Explicit checks
@@ -834,9 +932,21 @@ const SQLITE_CONSTRAINT = 19;
  * SQLite exception.
  */
 export function translateSqlError(err: unknown): never {
-  const e = err as { resultCode?: number; message?: string };
-  if (typeof e?.resultCode === "number" && (e.resultCode & 0xff) === SQLITE_CONSTRAINT) {
-    throw new ConstraintError("sqlite", e.message || "constraint violation");
+  const e = err as { resultCode?: number; message?: string; name?: string };
+  const code = typeof e?.resultCode === "number" ? e.resultCode & 0xff : null;
+  const message = e?.message || String(err);
+
+  if (code === SQLITE_CONSTRAINT) {
+    throw new ConstraintError("sqlite", message);
+  }
+  // Running out of room reaches us either as SQLITE_FULL, or as an I/O
+  // error wrapping the browser's own QuotaExceededError from the VFS.
+  // Both mean the same thing to the user and neither is a data bug, so
+  // both get the name that lets the UI say "storage is full".
+  if (code === SQLITE_FULL || e?.name === "QuotaExceededError"
+      || (code === SQLITE_IOERR && /quota/i.test(message))
+      || /quota|disk (is )?full|no space/i.test(message)) {
+    throw new QuotaExceededError(message);
   }
   throw err as Error;
 }

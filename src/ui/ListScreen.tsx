@@ -8,11 +8,12 @@ import { useCallback, useEffect, useState } from "react";
 import { db } from "../db/index.js";
 import {
   getListView, toggleEntry, createRoutine, getDayStartHour, setDayStartHour,
-  getStorageSummary, DEFAULT_LIST_DAYS,
+  getStorageSummary, checkEviction, DEFAULT_LIST_DAYS,
 } from "../logic/index.js";
 import type {
   CellState, ListCell, ListGroup, ListOptions, ListRow, ListView, StorageSummary,
 } from "../logic/index.js";
+import type { EvictionReport } from "../db/types.js";
 import type { Habit } from "../db/types.js";
 import { useAsync } from "./useAsync.js";
 import { CheckIcon, XIcon, PlusIcon, FilterIcon, MoreIcon, ChevronDownIcon, ChevronRightIcon } from "./icons.js";
@@ -355,6 +356,7 @@ export function ListScreen({ onOpenHabit, onAddHabit }: {
   );
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [writeError, setWriteError] = useState<Error | null>(null);
+  const [evicted, setEvicted] = useState<EvictionReport | null>(null);
   const filtering = !!options.includeArchived || !!options.hideCompletedToday;
 
   const { reload } = view;
@@ -369,6 +371,13 @@ export function ListScreen({ onOpenHabit, onAddHabit }: {
       setWriteError(err instanceof Error ? err : new Error(String(err)));
     }
   }, [reload]);
+
+  // Spec §9.12 test 59. An empty database is not automatically a new
+  // one, and saying "no habits yet" to someone whose history the browser
+  // evicted would be a lie they have no way to check.
+  useEffect(() => {
+    checkEviction(db).then(setEvicted, () => setEvicted(null));
+  }, []);
 
   const days = view.status === "ready" ? view.data.days : Array.from({ length: dayCount }, (_, i) => String(i));
   const today = view.status === "ready" ? view.data.today : null;
@@ -420,6 +429,20 @@ export function ListScreen({ onOpenHabit, onAddHabit }: {
           );
         })}
       </div>
+
+      {evicted && (
+        <div className="notice notice--error" role="alert">
+          <div className="notice__title">Your saved habits are gone</div>
+          <div className="notice__body">
+            This browser last held {evicted.lastKnownHabits} habit
+            {evicted.lastKnownHabits === 1 ? "" : "s"} and {evicted.lastKnownEntries} logged
+            day{evicted.lastKnownEntries === 1 ? "" : "s"}, on{" "}
+            {evicted.lastSeenAt.slice(0, 10)}. The database is now empty, which usually means
+            the browser cleared it to free space. Anything that had synced to a server is safe;
+            anything that had not is lost.
+          </div>
+        </div>
+      )}
 
       {view.status === "loading" && <Skeleton dayCount={dayCount} />}
 
