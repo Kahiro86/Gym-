@@ -563,7 +563,11 @@ async function main() {
       await page.getByLabel("More").click();
       await page.getByLabel("The day starts at").selectOption("6");
       await page.waitForTimeout(500);
-      const storage = await page.locator(".sheet__section").last().innerText();
+      // Addressed by its heading, not by position: B1 appended a Backup
+      // section below this one, and .last() silently started reading it.
+      const storage = await page.locator(".sheet__section")
+        .filter({ has: page.getByText("Storage", { exact: true }) })
+        .innerText();
       // Reopen to confirm it was persisted, not just held in the form.
       await page.keyboard.press("Escape");
       await page.getByLabel("More").click();

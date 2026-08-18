@@ -9,6 +9,7 @@ import type { Db, Habit, Routine, Entry } from "../db/types.js";
 import { addDays } from "./dates.js";
 import { isScheduled } from "./schedule.js";
 import { isCompleted } from "./completion.js";
+import { dayKey } from "./core.js";
 
 /** What a single day-cell shows. Spec §5, Screen 1. */
 export type CellState =
@@ -63,15 +64,6 @@ export interface ListView {
 }
 
 export const DEFAULT_LIST_DAYS = 5;
-
-/**
- * Key for the habit-and-date lookup. A NUL separator is used because it
- * cannot occur in a UUID or a YYYY-MM-DD date, so no pair of values can
- * collide. It is a single function rather than an inline template
- * because it was three, and one of them used a space instead — which
- * silently matched nothing and made a filter appear to do nothing at all.
- */
-const dayKey = (habitId: string, date: string): string => `${habitId}\u0000${date}`;
 
 /** Most recent first: [today, today-1, …]. */
 export function listDays(today: string, count: number): string[] {

@@ -244,8 +244,14 @@ export function CalendarScreen({ habitId, onBack }: { habitId: string; onBack: (
                 </div>
                 {/* Width is proportional to the longest run; the bar is
                     never empty, so a 1-day streak still reads as a bar. */}
+                {/* The unit differs by shape: days for a scheduled
+                    habit, weeks or months for a quota one. An unlabelled
+                    "4" would read as four days on a 3x/week habit. */}
                 <div className="streak-bar" style={{ width: `${Math.max(12, (run.length / streaks.data.longest) * 100)}%` }}>
-                  <span>{run.length}</span>
+                  <span>
+                    {run.length}
+                    {streaks.data.streakUnit === "day" ? "" : ` ${streaks.data.streakUnit}${run.length === 1 ? "" : "s"}`}
+                  </span>
                 </div>
               </div>
             ))
@@ -257,7 +263,23 @@ export function CalendarScreen({ habitId, onBack }: { habitId: string; onBack: (
       <section className="card">
         <div className="card__head"><span className="card__label">frequency</span></div>
         {streaks.status === "loading" && <div className="sk sk--line" style={{ height: 24 }} aria-busy="true" aria-label="Loading frequency" />}
-        {streaks.status === "ready" && (
+        {/* A quota habit has no weekday pattern, so seven dots would be
+            a lie either way: all lit implies daily, none lit implies
+            never. It gets its quota and this period's progress instead
+            (handoff A4, Layer 2b §2.2). */}
+        {streaks.status === "ready" && streaks.data.dots === null && (
+          <div className="quota">
+            <span className="quota__label">{streaks.data.quotaLabel}</span>
+            {streaks.data.quota && (
+              <span className="quota__progress">
+                {streaks.data.quota.completed} of {streaks.data.quota.required} this{" "}
+                {streaks.data.quota.periodEnd === streaks.data.quota.periodStart ? "period" : "week"}
+                {streaks.data.quota.met ? " — done" : ` — ${streaks.data.quota.remaining} to go`}
+              </span>
+            )}
+          </div>
+        )}
+        {streaks.status === "ready" && streaks.data.dots !== null && (
           <div className="freq-row">
             {streaks.data.dots.map((on, i) => (
               <div className="freq-day" key={WEEK_DOT_LABELS[i]}>

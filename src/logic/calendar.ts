@@ -5,18 +5,22 @@ import { isScheduled } from "./schedule.js";
 import { isCompleted } from "./completion.js";
 import { toEntryMap, computeHeatmap, computeBestStreaks, spanForHeatmap, type StreakRun } from "./core.js";
 import { effectiveStart } from "./period.js";
+import { getFrequencyShape, describeQuota, computeQuotaState, type QuotaState } from "./frequency.js";
 
 /** Monday-first, matching the frequency row's Mon-Sun labels. */
 export const WEEK_DOTS_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
 export const WEEK_DOT_LABELS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
-/** Which weekdays this habit is due on, Mon-Sun, for the frequency dots. */
-export function frequencyDots(habit: Habit): boolean[] {
-  // A count-based habit has no fixed weekday pattern — any day counts —
-  // so every dot is lit rather than implying a schedule it does not have.
-  if (habit.frequencyType === "times_per_week" || habit.frequencyType === "times_per_month") {
-    return WEEK_DOTS_ORDER.map(() => true);
-  }
+/**
+ * Which weekdays this habit is due on, Mon-Sun, for the frequency dots.
+ *
+ * Null for a quota habit. Handoff A4 is explicit that the dots are wrong
+ * for these — lighting all seven implies a daily schedule the habit does
+ * not have, and lighting none implies it is never due. There is no
+ * correct set of dots, so the card shows the quota instead.
+ */
+export function frequencyDots(habit: Habit): boolean[] | null {
+  if (getFrequencyShape(habit) === "quota") return null;
   if (habit.frequencyType === "daily") return WEEK_DOTS_ORDER.map(() => true);
   const days = habit.frequencyDays ?? [];
   return WEEK_DOTS_ORDER.map((d) => days.includes(d));
@@ -101,15 +105,32 @@ export interface StreaksView {
   runs: StreakRun[];
   /** Longest run, so bars can be sized proportionally. */
   longest: number;
-  dots: boolean[];
+  /** Null for a quota habit, which has no weekday pattern (A4). */
+  dots: boolean[] | null;
+  /** "3× per week" — shown in the dots' place. */
+  quotaLabel: string | null;
+  /** Where the habit stands this period, for the same card. */
+  quota: QuotaState | null;
+  /** Streaks are counted in periods for quota habits, days otherwise. */
+  streakUnit: "day" | "week" | "month";
   habit: Habit;
 }
 
 export async function getStreaksView(db: Db, habitId: string, limit = 5): Promise<StreaksView> {
   const { habit, today, start } = await loadHabit(db, habitId);
   const entries = await db.getEntriesForHabit(habitId, start, today);
-  const runs = computeBestStreaks(habit, start, toEntryMap(entries), today, limit);
-  return { runs, longest: runs.length ? runs[0].length : 0, dots: frequencyDots(habit), habit };
+  const map = toEntryMap(entries);
+  const runs = computeBestStreaks(habit, start, map, today, limit);
+  const quota = getFrequencyShape(habit) === "quota";
+  return {
+    runs,
+    longest: runs.length ? runs[0].length : 0,
+    dots: frequencyDots(habit),
+    quotaLabel: quota ? describeQuota(habit) : null,
+    quota: quota ? computeQuotaState(habit, map, today, today) : null,
+    streakUnit: quota ? (habit.frequencyType === "times_per_month" ? "month" : "week") : "day",
+    habit,
+  };
 }
 
 /** Month navigation, clamped so it cannot run past the data or the present. */

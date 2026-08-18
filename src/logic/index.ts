@@ -5,14 +5,25 @@
 // and no SQL — reads go through Layer 1's `Db` interface.
 import type { Db, Entry, Habit } from "../db/types.js";
 import {
-  toEntryMap, computeScore, computeCurrentStreak, computeBestStreaks,
+  toEntryMap, computeScore, computeScoreOrNull, computeCurrentStreak, computeBestStreaks,
   computeTrend, computeHistory, computeHeatmap,
   spanForPeriod, spanForStreaks, spanForTrend, spanForHistory, spanForHeatmap,
   type DateSpan, type EntryMap,
 } from "./core.js";
 import { effectiveStart, type Period } from "./period.js";
+import {
+  getFrequencyShape, periodContaining, computeQuotaState, type QuotaState,
+} from "./frequency.js";
+import { cache } from "./cache.js";
 
-export { getScoreColor, SCORE_COLOR_HEX } from "./core.js";
+export { getScoreColor, SCORE_COLOR_HEX, computeScoreOrNull } from "./core.js";
+export { isCompleted, allowsExplicitMiss } from "./completion.js";
+export { cache, LogicCache } from "./cache.js";
+export {
+  getFrequencyShape, quotaUnit, quotaRequired, describeQuota,
+  periodContaining, computeQuotaState,
+} from "./frequency.js";
+export type { FrequencyShape, QuotaState, QuotaUnit } from "./frequency.js";
 export type {
   StreakRun, TrendPoint, HistoryBucket, HeatmapDay, ScoreColor, EntryMap, DateSpan,
 } from "./core.js";
@@ -34,6 +45,11 @@ export {
   getDayStartHour, setDayStartHour, getStorageSummary, checkEviction,
 } from "./editor.js";
 export type { HabitDraft, DraftProblem, StorageSummary } from "./editor.js";
+export {
+  getScheduledHabitsForDate, getCompletionsForDate, getDayCompletionRate,
+  getHabitsSummary, getAggregateScore, getStreakAtDate, getCompletionsSince,
+} from "./aggregates.js";
+export type { DueHabit, HabitSummary, CompletionRow } from "./aggregates.js";
 export { exportAll, validateImport, importAll, backupFilename, BACKUP_FORMAT } from "./backup.js";
 export type { BackupFile, ImportReport, ImportProblem } from "./backup.js";
 
@@ -69,33 +85,67 @@ export function getEntriesForRange(db: Db, habitId: string, startDate: string, e
 }
 
 export async function getScore(db: Db, habitId: string, period: Period): Promise<number> {
-  const { habit, span, entries } = await load(db, habitId, (_h, s, t) => spanForPeriod(s, t, period));
-  return computeScore(habit, entries, span.start, span.end);
+  return cache.memo(db, habitId, "getScore", [period], async () => {
+    const { habit, span, entries, today } = await load(db, habitId, (_h, s, t) => spanForPeriod(s, t, period));
+    return computeScore(habit, entries, span.start, span.end, today);
+  });
+}
+
+/**
+ * The score, or null when the period predates the habit's history
+ * (Layer 2b §4.2). Never collapse this to 0 — see computeScoreOrNull.
+ */
+export async function getScoreOrNull(db: Db, habitId: string, period: Period): Promise<number | null> {
+  const { habit, span, entries, today } = await load(db, habitId, (_h, s, t) => spanForPeriod(s, t, period));
+  return computeScoreOrNull(habit, entries, span.start, span.end, today);
+}
+
+/**
+ * How a quota habit stands in the period containing `date` (§5).
+ * Returns null for a scheduled-shape habit, which has no quota to state.
+ */
+export async function getQuotaState(db: Db, habitId: string, date?: string): Promise<QuotaState | null> {
+  const [habit, today] = await Promise.all([db.getHabit(habitId), db.getToday()]);
+  if (getFrequencyShape(habit) !== "quota") return null;
+  const when = date ?? today;
+  const period = periodContaining(habit, when);
+  const entries = await db.getEntriesForHabit(habitId, period.start, period.end);
+  return computeQuotaState(habit, toEntryMap(entries), when, today);
 }
 
 export async function getCurrentStreak(db: Db, habitId: string): Promise<number> {
-  const { habit, start, today, entries } = await load(db, habitId, (_h, s, t) => spanForStreaks(s, t));
-  return computeCurrentStreak(habit, start, entries, today);
+  return cache.memo(db, habitId, "getCurrentStreak", [], async () => {
+    const { habit, start, today, entries } = await load(db, habitId, (_h, s, t) => spanForStreaks(s, t));
+    return computeCurrentStreak(habit, start, entries, today);
+  });
 }
 
 export async function getBestStreaks(db: Db, habitId: string, limit: number) {
-  const { habit, start, today, entries } = await load(db, habitId, (_h, s, t) => spanForStreaks(s, t));
-  return computeBestStreaks(habit, start, entries, today, limit);
+  return cache.memo(db, habitId, "getBestStreaks", [limit], async () => {
+    const { habit, start, today, entries } = await load(db, habitId, (_h, s, t) => spanForStreaks(s, t));
+    return computeBestStreaks(habit, start, entries, today, limit);
+  });
 }
 
 export async function getScoreTrend(db: Db, habitId: string, period: Period) {
-  const { habit, start, today, entries } = await load(db, habitId, (_h, s, t) => spanForTrend(s, t, period));
-  return computeTrend(habit, start, entries, today, period);
+  return cache.memo(db, habitId, "getScoreTrend", [period], async () => {
+    const { habit, start, today, entries } = await load(db, habitId, (_h, s, t) => spanForTrend(s, t, period));
+    return computeTrend(habit, start, entries, today, period);
+  });
 }
 
 export async function getHistory(db: Db, habitId: string, period: "week" | "month") {
-  const { habit, start, today, entries } = await load(db, habitId, (_h, s, t) => spanForHistory(s, t, period));
-  return computeHistory(habit, start, entries, today, period);
+  return cache.memo(db, habitId, "getHistory", [period], async () => {
+    const { habit, start, today, entries } = await load(db, habitId, (_h, s, t) => spanForHistory(s, t, period));
+    return computeHistory(habit, start, entries, today, period);
+  });
 }
 
 export async function getHeatmapData(db: Db, habitId: string, month: string) {
-  const { habit, start, today, entries } = await load(db, habitId, (_h, s) => spanForHeatmap(s, month));
-  return computeHeatmap(habit, start, entries, today, month);
+  return cache.memo(db, habitId, "getHeatmapData", [month], async () => {
+    const { habit, start, today, entries } = await load(db, habitId, (_h, s) => spanForHeatmap(s, month));
+    return computeHeatmap(habit, start, entries, today, month);
+  });
 }
 
 /** Numeric entry. Layer 1 validates the value itself. */

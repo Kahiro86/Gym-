@@ -304,7 +304,43 @@ export class Repository {
     return this.inTransaction(() => cb((table, recordId, op) => this.enqueue(table, recordId, op)));
   }
 
+  /**
+   * Layer 2b §6. A counter per habit, bumped inside the same transaction
+   * as any write that could change what a score or streak reads.
+   *
+   * Layer 2's cache keys include it, so a rolled-back write leaves the
+   * counter where it was and the cache stays correct — which is exactly
+   * why it lives in the transaction rather than beside it.
+   */
+  private bumpWriteCounter(table: SyncTable, recordId: string): void {
+    // Only entries change a habit's arithmetic; a rename does not. But a
+    // habit's own row carries its frequency and target, which do.
+    const habitId = table === "entries"
+      ? (this.h.rows(`SELECT habit_id FROM entries WHERE id=?`, [recordId])[0]?.habit_id ?? null)
+      : table === "habits" ? recordId : null;
+    if (habitId == null) return;
+    this.h.run(
+      `INSERT INTO meta(key,value) VALUES (?, '1')
+       ON CONFLICT(key) DO UPDATE SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)`,
+      [`writes:${String(habitId)}`],
+    );
+  }
+
+  /**
+   * Every habit's write counter, in one read. Layer 2 folds these into
+   * its cache keys, so a habit whose entries changed misses the cache and
+   * every other habit still hits it.
+   */
+  getWriteCounters(): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const r of this.h.rows(`SELECT key, value FROM meta WHERE key LIKE 'writes:%'`)) {
+      out[String(r.key).slice(7)] = Number(r.value);
+    }
+    return out;
+  }
+
   private enqueue(table: SyncTable, recordId: string, operation: SyncOperation): void {
+    this.bumpWriteCounter(table, recordId);
     // The row as of write time, including a tombstone if that is what
     // just happened — a delete is pushed as data, not as an absence.
     const rows = this.h.rows(`SELECT * FROM ${table} WHERE id=?`, [recordId]);
@@ -710,6 +746,29 @@ export class Repository {
       `SELECT MIN(date) FROM entries WHERE habit_id=? AND deleted_at IS NULL`, [habitId],
     );
     return v == null ? null : String(v);
+  }
+
+  /**
+   * The first logged date for many habits at once.
+   *
+   * Layer 2b §5 requires getHabitsSummary to be a fixed number of
+   * statements; calling getFirstEntryDate per habit made it O(habits),
+   * which twenty rows on the list screen turns into twenty Worker
+   * round-trips. Habits with no entries are simply absent from the map.
+   */
+  getFirstEntryDates(habitIds: string[]): Record<string, string> {
+    if (!habitIds.length) return {};
+    const placeholders = habitIds.map(() => "?").join(",");
+    const out: Record<string, string> = {};
+    for (const r of this.h.rows(
+      `SELECT habit_id, MIN(date) AS first FROM entries
+       WHERE habit_id IN (${placeholders}) AND deleted_at IS NULL
+       GROUP BY habit_id`,
+      habitIds,
+    )) {
+      if (r.first != null) out[String(r.habit_id)] = String(r.first);
+    }
+    return out;
   }
 
   getEntryCount(habitId: string): number {

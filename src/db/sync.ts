@@ -32,6 +32,15 @@ const BACKOFF_MS = [0, 2_000, 8_000, 30_000, 120_000, 600_000];
 
 const stamp = (): string => now().toISOString();
 
+/**
+ * Tells anyone listening that remote rows landed. The Worker cannot
+ * reach Layer 2's cache directly — and should not know it exists — so the
+ * main thread hears about it through the RPC boundary instead.
+ */
+function announcePull(): void {
+  (self as unknown as Worker).postMessage({ id: -1, ok: true, result: { __event: "pull" } });
+}
+
 /** Reads config from the build. Absent values mean sync is not set up. */
 export function configFromEnv(env: Record<string, string | undefined>): SyncConfig | null {
   const url = env.VITE_SUPABASE_URL;
@@ -129,6 +138,11 @@ export class SyncEngine {
       // would then discard them. Pull only from a drained queue.
       if (this.repo.getPendingCount() === 0) {
         result.pulled = await this.pull();
+        // Layer 2b §6: a pull can change rows for habits whose local
+        // write counter never moved, so nothing cached upstairs can be
+        // trusted. Announced rather than called directly — Layer 1 must
+        // not know that a cache exists.
+        if (result.pulled > 0) announcePull();
         // §6. Only reached on a clean cycle, and purgeTombstones itself
         // touches nothing the server has not acknowledged — an unsynced
         // tombstone dropped here would let its row return on the next pull.

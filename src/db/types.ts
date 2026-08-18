@@ -168,6 +168,8 @@ export interface Db {
   setEntry(habitId: string, date: string, value: number, note?: string | null): Promise<Entry>;
   deleteEntry(habitId: string, date: string): Promise<void>;
   getFirstEntryDate(habitId: string): Promise<string | null>;
+  /** The same, for many habits in one statement. Habits with no entries are omitted. */
+  getFirstEntryDates(habitIds: string[]): Promise<Record<string, string>>;
   getEntryCount(habitId: string): Promise<number>;
 
   getToday(): Promise<string>;
@@ -186,6 +188,13 @@ export interface Db {
   importData(rows: ExportRows, opts: { mode: "replace" | "merge"; confirmed?: boolean }): Promise<ImportResult>;
   /** The clock's current instant, so Layer 2 never calls new Date(). */
   getExportTimestamp(): Promise<string>;
+
+  /**
+   * Per-habit write counters, bumped inside each write's own transaction.
+   * Layer 2b §6 folds these into its cache keys; Layer 1 neither knows
+   * nor cares that a cache exists.
+   */
+  getWriteCounters(): Promise<Record<string, number>>;
 
   // ── Sync, as far as anything above Layer 1 is allowed to see it ─────
   // Layer 1b §8: exactly two facts, and no more. The queue, tombstones,

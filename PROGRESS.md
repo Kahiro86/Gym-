@@ -82,10 +82,12 @@ has 17 integration tests.
 | Layer 1 acceptance (1-31) | 32/32 |
 | Layer 1 extended (32-60) | 32/32 |
 | Layer 2 integration | 17/17 |
-| Layer 2 and Layer 1 unit | 245/245 |
+| Layer 2 and Layer 1 unit | 307/307 |
 | Storage (§9.2) | 6/6 |
 | Sync (§9.2-9.3) | 11/11 |
 | Editor and Screen 1 | 26/26 |
+| Backup (Layer 2b §5) | 8/8 |
+| Layer 2b acceptance (15-24) | 9/9 |
 | Supabase (§9.4) | not run — no project |
 
 Every Layer 2 source and test that existed before Layer 1b is byte-identical
@@ -121,8 +123,47 @@ Each of these was live, and none was caught by the previous 31 tests.
    yet". A marker outside the database now makes the two distinguishable,
    and the list says so plainly.
 
+## Layer 2b — logic enhancement — DONE
+
+Additive throughout: no Layer 2 function changed its signature, and the
+whole pre-Layer-2b Layer 2 suite passes unmodified.
+
+- **B1 export/import.** `logic/backup.ts` — `exportAll`, `validateImport`
+  (reports every problem in one pass, catches foreign-key and unique
+  violations before writing, refuses a file from a newer schema),
+  `importAll`, `backupFilename`. Layer 1 gained `exportRows` /
+  `importData`, one transaction, replace requiring explicit confirmation
+  and merge keeping the newer `updated_at`. Reachable from the overflow
+  menu.
+- **B2 frequency shapes.** `logic/frequency.ts` — `getFrequencyShape`
+  splits `daily`/`specific_days` (scheduled) from
+  `times_per_week`/`times_per_month` (quota). Quota periods are Mon-Sun
+  weeks or calendar months; streaks count periods, not days; a period
+  still running can never have been broken. Five branch points in
+  `core.ts`, each commented, so no quota habit ever runs through
+  scheduled-habit logic.
+- **B3 at_most.** `allowsExplicitMiss` is false for a numeric `at_most`
+  habit — a zero is a perfect day, so a tri-state "mark as missed" would
+  be a lie. The menu item is hidden for those habits.
+- **B4 boundaries.** `computeScoreOrNull` returns null where a score is
+  unknowable instead of 0, and clamps the window to today so days that
+  have not happened cannot sit in the denominator.
+- **B5/B7 aggregates.** `logic/aggregates.ts` —
+  `getScheduledHabitsForDate`, `getCompletionsForDate`,
+  `getDayCompletionRate`, `getHabitsSummary`, `getAggregateScore`,
+  `getStreakAtDate`, `getCompletionsSince`. Every whole-list read is a
+  fixed number of statements; the acceptance suite measures that rather
+  than asserting it.
+- **B6 caching.** `logic/cache.ts`, keyed on
+  `(habitId, fn, args, writeCounter)`. Layer 1 bumps the counter inside
+  each write's own transaction, so a rolled-back write leaves the cache
+  correct. A pull drops the cache entirely, announced by Layer 1 and
+  acted on in `main.tsx` — Layer 1 still does not know a cache exists.
+
 ## Next
-Supabase provisioning, then the remaining §9.4 tests.
+Supabase provisioning, then the remaining §9.4 tests. §7.4 is still open:
+how Kahiro's XP engine ingests `getCompletionsSince` is not specified, so
+only the habit app's side of that boundary is built.
 
 ---
 
@@ -190,3 +231,22 @@ Supabase provisioning, then the remaining §9.4 tests.
     cannot invent an amount — was right, but navigating away meant the
     app's central gesture did nothing on a measurable habit. Only the
     habit's name navigates now.
+14. **Layer 1 gained `getFirstEntryDates`.** §5 requires the whole-list
+    reads to be batched, and `effectiveStart` needs each habit's first
+    logged day; asking per habit made `getHabitsSummary` cost one Worker
+    round trip per row. Adding a batched read to Layer 1 is what its own
+    boundary rule prescribes — a query upstairs would not have been.
+15. **`dayKey` moved into `core.ts`.** Three call sites built the same
+    habit-and-date key inline and one of them used a different separator,
+    which silently matched nothing. There is now one function, and
+    `aggregates.ts` no longer carries literal NUL bytes in its source.
+16. **One editor test's selector was updated.** It read the storage
+    section as `.sheet__section` `.last()`, and B1 appended a Backup
+    section below it, so it began reading the wrong element. It now
+    addresses the section by its heading. The assertion is unchanged —
+    the storage line must still name the VFS.
+17. **`cache.test.ts` exists because the acceptance suite cannot force
+    one interleaving.** Test 21 proves the running app never serves a
+    stale streak, but the Worker's queue decides the order, so the exact
+    write-during-compute window is not reachable from a browser test. The
+    unit test holds `compute` open and moves the counter underneath it.

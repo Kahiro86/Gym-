@@ -190,3 +190,18 @@
 .freq-day span { font-size: 9px; color: var(--text-secondary); }
 
 .sk--grid { height: 180px; border-radius: 6px; }
+
+/* A quota habit's frequency card: no weekday dots, because it has no
+   weekday pattern. The quota and this period's progress instead. */
+.quota { display: flex; flex-direction: column; gap: 4px; }
+
+.quota__label {
+  font-size: 15px;
+  color: var(--accent-gold);
+}
+
+.quota__progress {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}

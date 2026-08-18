@@ -24,6 +24,14 @@ import type { Db, EvictionReport, RowCounts, StorageInfo, VfsInfo } from "./type
  */
 const MARKER_KEY = "habits:last-known";
 
+/** Called when the Worker reports that a sync pull applied rows. */
+const pullListeners = new Set<() => void>();
+
+export function onSyncPull(fn: () => void): () => void {
+  pullListeners.add(fn);
+  return () => pullListeners.delete(fn);
+}
+
 interface Marker { habits: number; entries: number; at: string; persisted: boolean }
 
 function readMarker(): Marker | null {
@@ -71,6 +79,13 @@ class WorkerBridge {
     this.worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
     this.worker.onmessage = (ev: MessageEvent<RpcResponse>) => {
       const msg = ev.data;
+      // id -1 is not a reply to anything: it is the Worker announcing
+      // that a sync pull landed. Layer 2 subscribes; Layer 1 stays
+      // unaware that anyone is listening.
+      if (msg.id === -1) {
+        if (msg.ok) for (const fn of pullListeners) fn();
+        return;
+      }
       const slot = this.pending.get(msg.id);
       if (!slot) return;
       this.pending.delete(msg.id);

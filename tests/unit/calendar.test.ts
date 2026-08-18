@@ -26,9 +26,14 @@ describe("frequencyDots", () => {
     expect(frequencyDots(sundays)).toEqual([false, false, false, false, false, false, true]);
   });
 
-  it("lights every day for a count-based habit, which has no weekday pattern", () => {
-    const tpw = makeHabit({ frequencyType: "times_per_week", frequencyCount: 3 });
-    expect(frequencyDots(tpw)).toEqual(Array(7).fill(true));
+  it("returns null for a count-based habit, which has no weekday pattern", () => {
+    // This used to light all seven dots. Handoff A4 and Layer 2b §2.2
+    // are explicit that the card is wrong for these habits either way:
+    // all lit implies a daily schedule, none lit implies never due. The
+    // screen shows "3× per week" in the dots' place instead.
+    const weekly = makeHabit({ frequencyType: "times_per_week", frequencyCount: 3 });
+    expect(frequencyDots(weekly)).toBeNull();
+    expect(frequencyDots(makeHabit({ frequencyType: "times_per_month", frequencyCount: 10 }))).toBeNull();
   });
 });
 

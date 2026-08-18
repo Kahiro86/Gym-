@@ -58,6 +58,7 @@ jobs:
           BASE_URL=http://localhost:5199/Gym-/ node tests/acceptance/sync.mjs
           BASE_URL=http://localhost:5199/Gym-/ node tests/acceptance/editor.mjs
           BASE_URL=http://localhost:5199/Gym-/ node tests/acceptance/backup.mjs
+          BASE_URL=http://localhost:5199/Gym-/ node tests/acceptance/layer2b.mjs
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

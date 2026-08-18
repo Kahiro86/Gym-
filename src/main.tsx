@@ -1,6 +1,6 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { db } from "./db/index.js";
+import { db, onSyncPull } from "./db/index.js";
 import * as logic from "./logic/index.js";
 import type { Habit } from "./db/types.js";
 import { ListScreen } from "./ui/ListScreen.js";
@@ -20,6 +20,12 @@ declare global {
 // Layers 1 and 2 directly against the real Worker + OPFS stack.
 window.__db = db;
 window.__logic = logic;
+
+// Layer 2b §6. A sync pull can change rows for habits whose local write
+// counter never moved, so nothing memoised upstairs survives one. Wired
+// here rather than inside Layer 2 so the dependency runs downwards:
+// Layer 1 announces, the app decides who cares.
+onSyncPull(() => logic.cache.clear());
 
 type Route =
   | { screen: "list" }

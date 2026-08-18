@@ -9,7 +9,7 @@ import { db } from "../db/index.js";
 import {
   getListView, toggleEntry, setEntry, deleteEntry, createRoutine,
   getDayStartHour, setDayStartHour, getStorageSummary, checkEviction,
-  exportAll, importAll, validateImport, backupFilename, DEFAULT_LIST_DAYS,
+  exportAll, importAll, validateImport, backupFilename, allowsExplicitMiss, DEFAULT_LIST_DAYS,
 } from "../logic/index.js";
 import type {
   CellState, ImportReport, ListCell, ListGroup, ListOptions, ListRow, ListView, StorageSummary,
@@ -130,10 +130,15 @@ function AmountEntry({ habit, date, current, onSave, onClear, onCancel }: {
         </div>
         <div className="amount__row">
           {/* 0 is a real answer, not an empty one: it records that the
-              day was missed on purpose. Kept separate from Clear. */}
-          <button type="button" className="amount__action" onClick={() => onSave(0)}>
-            Mark as missed
-          </button>
+              day was missed on purpose. Kept separate from Clear.
+              Absent for an at_most habit, where a logged 0 is the BEST
+              outcome and calling it a miss would invert the habit
+              (Layer 2b §3). */}
+          {allowsExplicitMiss(habit) && (
+            <button type="button" className="amount__action" onClick={() => onSave(0)}>
+              Mark as missed
+            </button>
+          )}
           <button
             type="button"
             className="amount__action"

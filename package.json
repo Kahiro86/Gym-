@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:layer1": "node tests/acceptance/layer1.mjs",
-    "test:layer2": "node tests/acceptance/layer2.mjs"
+    "test:layer2": "node tests/acceptance/layer2.mjs",
+    "test:layer2b": "node tests/acceptance/layer2b.mjs"
   },
   "devDependencies": {
     "@types/react": "18.3.18",

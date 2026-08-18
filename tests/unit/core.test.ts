@@ -69,9 +69,22 @@ describe("computeScore", () => {
   });
 
   it("clamps to 100 when a times_per_week habit is over-logged", () => {
+    // The range is a whole Mon-Sun week. It used to be Sun-Sat, which
+    // the old implementation could score as one week by prorating the
+    // denominator across whatever range it was handed. Layer 2b §2.2
+    // makes the week the unit, so a Sun-Sat range is genuinely two
+    // periods and cannot be "one week over-logged" — see the next test.
     const h = makeHabit({ createdDate: "2026-08-01", frequencyType: "times_per_week", frequencyCount: 3 });
     // Expected 3, logged 7 -> 233% before clamping.
-    expect(computeScore(h, entriesForRange("2026-08-09", "2026-08-15"), "2026-08-09", "2026-08-15")).toBe(100);
+    expect(computeScore(h, entriesForRange("2026-08-10", "2026-08-16"), "2026-08-10", "2026-08-16")).toBe(100);
+  });
+
+  it("a range straddling two weeks is judged as two weeks, not one", () => {
+    const h = makeHabit({ createdDate: "2026-08-01", frequencyType: "times_per_week", frequencyCount: 3 });
+    // Sun 9th through Sat 15th: one day of the week beginning the 3rd
+    // (1 of 3 that week) and six of the week beginning the 10th (3 of 3).
+    // 90, not 100 — the earlier week really was missed.
+    expect(computeScore(h, entriesForRange("2026-08-09", "2026-08-15"), "2026-08-09", "2026-08-15")).toBe(90);
   });
 
   it("returns 0 for an inverted range", () => {

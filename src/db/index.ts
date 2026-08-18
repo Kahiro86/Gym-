@@ -1,9 +1,10 @@
 // Layer 1's public entry point. Layer 2 imports `db` from here; Layer 3
 // never imports from this module at all (non-negotiable #3 — the UI talks
 // only to Layer 2).
-import { createDbClient } from "./client.js";
+import { createDbClient, onSyncPull } from "./client.js";
 
 export const db = createDbClient();
+export { onSyncPull };
 
 export type {
   Db, Routine, Habit, Entry,
