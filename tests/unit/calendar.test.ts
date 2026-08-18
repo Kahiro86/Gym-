@@ -43,10 +43,22 @@ describe("buildCalendarMonth", () => {
     buildCalendarMonth(h, startOf(h), entries, today, month);
 
   it("aligns the 1st under its weekday with the right number of blanks", () => {
-    // 2026-08-01 is a Saturday -> 6 leading blanks (Su=0).
-    expect(build("2026-08").leadingBlanks).toBe(6);
-    // 2026-02-01 is a Sunday -> none.
-    expect(build("2026-02").leadingBlanks).toBe(0);
+    // Every weekday a month can start on, so the alignment is proven
+    // rather than sampled. Su=0, so the blank count IS the weekday index.
+    const starts = {
+      "2026-02": 0, // Sunday
+      "2026-06": 1, // Monday
+      "2026-09": 2, // Tuesday
+      "2026-04": 3, // Wednesday
+      "2026-01": 4, // Thursday
+      "2026-05": 5, // Friday
+      "2026-08": 6, // Saturday
+    };
+    for (const [month, blanks] of Object.entries(starts)) {
+      expect(`${month}: ${build(month).leadingBlanks}`).toBe(`${month}: ${blanks}`);
+      // The 1st has to land in the column the blanks point at.
+      expect(build(month).days[0].date).toBe(`${month}-01`);
+    }
   });
 
   it("emits one cell per day, including February in a leap year", () => {
