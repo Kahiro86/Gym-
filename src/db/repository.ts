@@ -132,6 +132,22 @@ const SYNCED_COLUMNS: Record<SyncTable, string[]> = {
   ],
 };
 
+export interface ExportRows {
+  routines: Record<string, unknown>[];
+  habits: Record<string, unknown>[];
+  entries: Record<string, unknown>[];
+  meta: { key: string; value: string }[];
+}
+
+export interface ImportResult {
+  routines: number;
+  habits: number;
+  entries: number;
+  /** Rows the merge left alone because the local copy was newer. */
+  skipped: number;
+  cleared: boolean;
+}
+
 export interface SyncQueueItem {
   id: number;
   tableName: SyncTable;
@@ -764,6 +780,106 @@ export class Repository {
       }
     });
     return results;
+  }
+
+  // ── Export and import (Layer 2b §5, handoff B1) ─────────────────────
+
+  /**
+   * Every live row, as plain objects. Tombstones are excluded: a backup
+   * is what the user has, not the app's sync bookkeeping.
+   *
+   * `sync_status` is stripped for the same reason it is stripped from a
+   * push payload — it describes this device's relationship with a server,
+   * not the data, and importing someone else's would be meaningless.
+   */
+  exportRows(): ExportRows {
+    const live = (table: SyncTable) => this.h
+      .rows(`SELECT * FROM ${table} WHERE deleted_at IS NULL ORDER BY id`)
+      .map((r) => {
+        const { sync_status: _s, deleted_at: _d, ...rest } = r;
+        return rest;
+      });
+    return {
+      routines: live("routines"),
+      habits: live("habits"),
+      entries: live("entries"),
+      // day_start_hour travels; device_id and sync watermarks do not —
+      // they belong to the device, not the history.
+      meta: this.h.rows(`SELECT key, value FROM meta WHERE key IN ('schema_version','day_start_hour')`)
+        .map((r) => ({ key: String(r.key), value: String(r.value) })),
+    };
+  }
+
+  /**
+   * Writes an exported dataset back, in ONE transaction (handoff B1).
+   *
+   * A partial import is worse than a failed one: the user would be left
+   * with a database that is neither their old data nor their backup, and
+   * no way to tell which rows came from where. Everything below therefore
+   * happens inside a single transaction, and the rollback is tested.
+   *
+   * `replace` clears first and demands confirmation, because it destroys
+   * whatever is already here. `merge` upserts, letting the more recently
+   * updated version of each row win — the same rule sync uses, so the two
+   * paths cannot disagree.
+   */
+  importData(rows: ExportRows, opts: { mode: "replace" | "merge"; confirmed?: boolean }): ImportResult {
+    if (opts.mode === "replace" && !opts.confirmed) {
+      throw new ConfirmationRequiredError("importData in replace mode");
+    }
+    const counts: ImportResult = { routines: 0, habits: 0, entries: 0, skipped: 0, cleared: false };
+
+    this.inTransaction(() => {
+      if (opts.mode === "replace") {
+        // Children first: the foreign key is ON.
+        this.h.run(`DELETE FROM entries`);
+        this.h.run(`DELETE FROM habits`);
+        this.h.run(`DELETE FROM routines`);
+        this.h.run(`DELETE FROM sync_queue`);
+        counts.cleared = true;
+      }
+
+      // Parents before children, so an entry never arrives before its
+      // habit and trips the foreign key.
+      for (const table of ["routines", "habits", "entries"] as SyncTable[]) {
+        for (const row of rows[table]) {
+          if (opts.mode === "merge" && !this.isNewerThanLocal(table, row)) {
+            counts.skipped++;
+            continue;
+          }
+          this.applyRemoteRow(table, { ...row, sync_status: undefined });
+          // Imported rows have not reached any server, whatever
+          // applyRemoteRow assumed, so they are queued like a local write.
+          this.h.run(`UPDATE ${table} SET sync_status='pending' WHERE id=?`, [String(row.id)]);
+          this.enqueue(table, String(row.id), "upsert");
+          counts[table]++;
+        }
+      }
+
+      for (const { key, value } of rows.meta) {
+        // schema_version is the database's own, never the file's.
+        if (key === "schema_version") continue;
+        this.setMeta(key, value);
+      }
+    });
+
+    return counts;
+  }
+
+  /** Merge rule: the more recently updated row wins, ties to the local one. */
+  private isNewerThanLocal(table: SyncTable, row: Record<string, unknown>): boolean {
+    const local = this.getRawRow(table, String(row.id));
+    if (!local) return true;
+    return String(row.updated_at ?? "") > String(local.updated_at ?? "");
+  }
+
+  /**
+   * The clock's now, as an ISO string. Exists so Layer 2 can stamp an
+   * export without calling `new Date()` — spec §3 allows exactly one such
+   * call in the codebase, and an acceptance test enforces it.
+   */
+  getExportTimestamp(): string {
+    return stamp();
   }
 
   /** Spec §9.8 test 38. Returns the query plan for a statement. */

@@ -8,10 +8,11 @@ import { useCallback, useEffect, useState } from "react";
 import { db } from "../db/index.js";
 import {
   getListView, toggleEntry, setEntry, deleteEntry, createRoutine,
-  getDayStartHour, setDayStartHour, getStorageSummary, checkEviction, DEFAULT_LIST_DAYS,
+  getDayStartHour, setDayStartHour, getStorageSummary, checkEviction,
+  exportAll, importAll, validateImport, backupFilename, DEFAULT_LIST_DAYS,
 } from "../logic/index.js";
 import type {
-  CellState, ListCell, ListGroup, ListOptions, ListRow, ListView, StorageSummary,
+  CellState, ImportReport, ListCell, ListGroup, ListOptions, ListRow, ListView, StorageSummary,
 } from "../logic/index.js";
 import type { EvictionReport } from "../db/types.js";
 import type { Habit } from "../db/types.js";
@@ -317,6 +318,178 @@ const SYNC_WORDING: Record<StorageSummary["syncState"], string> = {
   error: "A change was refused by the server.",
 };
 
+/**
+ * Backup: download everything, or restore from a file.
+ *
+ * Built because the local database is evictable and sync is not live —
+ * this is currently the only way a year of history can be got off the
+ * device. A restore always shows what the file contains and what will
+ * happen to what is already here, before anything is written.
+ */
+function BackupSection({ onChanged }: { onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ json: unknown; report: ImportReport; name: string } | null>(null);
+  const [mode, setMode] = useState<"merge" | "replace">("merge");
+
+  const download = async () => {
+    setBusy(true); setError(null); setNote(null);
+    try {
+      const file = await exportAll(db);
+      const name = backupFilename(file.exportedAt);
+      const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      // Revoking immediately can cancel the download in some browsers.
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      setNote(`Saved ${name} — ${file.habits.length} habits, ${file.entries.length} logged days.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const choose = async (fileList: FileList | null) => {
+    const file = fileList?.[0];
+    if (!file) return;
+    setBusy(true); setError(null); setNote(null);
+    try {
+      const text = await file.text();
+      let json: unknown;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        setError(`${file.name} is not valid JSON.`);
+        return;
+      }
+      const current = Number((await db.getMeta("schema_version")) ?? 0);
+      // Reported before anything is written, always.
+      setPending({ json, report: validateImport(json, current), name: file.name });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmImport = async () => {
+    if (!pending) return;
+    setBusy(true); setError(null);
+    try {
+      const { result } = await importAll(db, pending.json, { mode, confirmed: true });
+      if (result) {
+        setNote(
+          `Imported ${result.habits} habits and ${result.entries} logged days`
+          + (result.skipped ? `, keeping ${result.skipped} newer local rows` : "")
+          + (result.cleared ? ", after clearing what was here" : "") + ".",
+        );
+        setPending(null);
+        onChanged();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="sheet__section">
+      <span className="sheet__label">Backup</span>
+      <span className="sheet__hint">
+        Your habits live on this device. Browsers can clear that storage, so keep a copy.
+      </span>
+
+      <div className="sheet__inline">
+        <button type="button" className="sheet__button" disabled={busy} onClick={download}>
+          Download
+        </button>
+        <label className="sheet__button sheet__button--file">
+          Restore
+          <input
+            type="file"
+            accept="application/json,.json"
+            aria-label="Choose a backup file"
+            onChange={(e) => void choose(e.target.files)}
+          />
+        </label>
+      </div>
+
+      {pending && (
+        <div className="backup" role="dialog" aria-label="Confirm import">
+          <div className="sheet__label">{pending.name}</div>
+          <span className="sheet__hint">
+            {pending.report.counts.habits} habits, {pending.report.counts.routines} groups,{" "}
+            {pending.report.counts.entries} logged days
+            {pending.report.exportedAt ? `, saved ${pending.report.exportedAt.slice(0, 10)}` : ""}.
+          </span>
+
+          {pending.report.errors.length > 0 && (
+            <div className="backup__errors" role="alert">
+              <div className="sheet__label">This file cannot be imported</div>
+              {pending.report.errors.slice(0, 6).map((p, i) => (
+                <div className="backup__problem" key={i}>{p.at}: {p.message}</div>
+              ))}
+              {pending.report.errors.length > 6 && (
+                <div className="backup__problem">…and {pending.report.errors.length - 6} more.</div>
+              )}
+            </div>
+          )}
+
+          {pending.report.warnings.map((p, i) => (
+            <div className="sheet__hint" key={i}>{p.message}</div>
+          ))}
+
+          {pending.report.ok && (
+            <>
+              <div className="segmented" role="group" aria-label="How to import">
+                <button
+                  type="button" className="segmented__option" aria-pressed={mode === "merge"}
+                  onClick={() => setMode("merge")}
+                >
+                  Merge
+                </button>
+                <button
+                  type="button" className="segmented__option" aria-pressed={mode === "replace"}
+                  onClick={() => setMode("replace")}
+                >
+                  Replace
+                </button>
+              </div>
+              <span className="sheet__hint">
+                {mode === "merge"
+                  ? "Adds what is missing and updates anything the file has a newer version of. Nothing is deleted."
+                  : "Deletes everything on this device first, then restores the file exactly. This cannot be undone."}
+              </span>
+            </>
+          )}
+
+          <div className="amount__row">
+            <button type="button" className="amount__action" onClick={() => setPending(null)}>
+              Cancel
+            </button>
+            {pending.report.ok && (
+              <button
+                type="button"
+                className={mode === "replace" ? "backup__danger" : "sheet__button"}
+                disabled={busy}
+                onClick={confirmImport}
+              >
+                {mode === "replace" ? "Erase and restore" : "Merge in"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {note && <span className="sheet__hint">{note}</span>}
+      {error && <div className="sheet__error" role="alert">{error}</div>}
+    </div>
+  );
+}
+
 /** Overflow: settings and the things that are not per-habit. */
 function MoreSheet({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
   const [groupName, setGroupName] = useState("");
@@ -399,6 +572,8 @@ function MoreSheet({ onClose, onChanged }: { onClose: () => void; onChanged: () 
             : "Reading…"}
         </span>
       </div>
+
+      <BackupSection onChanged={onChanged} />
 
       {error && <div className="sheet__error" role="alert">{error}</div>}
     </Sheet>

@@ -34,6 +34,8 @@ export {
   getDayStartHour, setDayStartHour, getStorageSummary, checkEviction,
 } from "./editor.js";
 export type { HabitDraft, DraftProblem, StorageSummary } from "./editor.js";
+export { exportAll, validateImport, importAll, backupFilename, BACKUP_FORMAT } from "./backup.js";
+export type { BackupFile, ImportReport, ImportProblem } from "./backup.js";
 
 interface Loaded {
   habit: Habit;

@@ -63,6 +63,22 @@ export interface VfsInfo {
   files: string[];
 }
 
+export interface ExportRows {
+  routines: Record<string, unknown>[];
+  habits: Record<string, unknown>[];
+  entries: Record<string, unknown>[];
+  meta: { key: string; value: string }[];
+}
+
+export interface ImportResult {
+  routines: number;
+  habits: number;
+  entries: number;
+  /** Rows a merge left alone because the local copy was newer. */
+  skipped: number;
+  cleared: boolean;
+}
+
 export interface RowCounts {
   habits: number;
   routines: number;
@@ -162,6 +178,14 @@ export interface Db {
 
   /** Where the data is stored and whether it is safe from eviction. */
   getStorageInfo(): Promise<StorageInfo>;
+
+  // ── Backup (Layer 2b §5) ────────────────────────────────────────────
+  /** Every live row, tombstones and local bookkeeping excluded. */
+  exportRows(): Promise<ExportRows>;
+  /** Writes an exported dataset back, atomically. Validate before calling. */
+  importData(rows: ExportRows, opts: { mode: "replace" | "merge"; confirmed?: boolean }): Promise<ImportResult>;
+  /** The clock's current instant, so Layer 2 never calls new Date(). */
+  getExportTimestamp(): Promise<string>;
 
   // ── Sync, as far as anything above Layer 1 is allowed to see it ─────
   // Layer 1b §8: exactly two facts, and no more. The queue, tombstones,

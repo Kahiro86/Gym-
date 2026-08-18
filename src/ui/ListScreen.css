@@ -418,3 +418,52 @@
 
 .amount__save:disabled,
 .amount__action:disabled { opacity: 0.4; border-color: var(--border); color: var(--text-secondary); }
+
+/* ── Backup ───────────────────────────────────────────────────────── */
+/* A file input styled as a button: the native control cannot be made
+   to match, so it is hidden behind one that can. */
+.sheet__button--file { position: relative; overflow: hidden; display: inline-flex; align-items: center; }
+
+.sheet__button--file input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.backup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 12px;
+  border: 0.5px solid var(--accent-gold);
+  border-radius: 12px;
+  background: var(--bg-page);
+}
+
+.backup__errors {
+  padding: 8px 10px;
+  border: 0.5px solid var(--danger-red);
+  border-radius: 9px;
+}
+
+.backup__problem {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--danger-red);
+  word-break: break-word;
+}
+
+/* Replace destroys data, so its confirm button says so in the one
+   colour the palette reserves for that. */
+.backup__danger {
+  flex: none;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 0.5px solid var(--danger-red);
+  border-radius: 9px;
+  color: var(--danger-red);
+  font-size: 13px;
+}
